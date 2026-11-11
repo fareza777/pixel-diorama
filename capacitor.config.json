@@ -1,0 +1,12 @@
+{
+  "appId": "com.f7developer.pixeldiorama",
+  "appName": "Pixel Diorama",
+  "webDir": "dist",
+  "backgroundColor": "#0b0d1a",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "backgroundColor": "#0b0d1a"
+  },
+  "plugins": {}
+}

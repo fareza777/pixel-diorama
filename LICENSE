@@ -1,0 +1,7 @@
+Pixel Diorama: World Builder
+Copyright (c) 2026 F7 Developer. All rights reserved.
+
+The game code, design and content in this repository are proprietary to F7 Developer, except for
+the third-party components listed in THIRD_PARTY_NOTICES.md, which remain under their own licenses
+(MIT). Files under src/engine/ that are adapted from noxe-pixel-engine are distributed under the
+MIT License; see src/engine/LICENSE-noxe-pixel-engine.txt.
