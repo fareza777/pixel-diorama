@@ -2,9 +2,9 @@
 // carefully back up) to hold 60 fps. Also caps rendering at 60 fps on high-refresh screens.
 
 export const TIERS = {
-  low: { name: 'Low', shadow: 1024, shadowEvery: 2, bloom: 0, mirror: false, lights: 2, grass: 0.35, smoke: false, outline: 0.45 },
-  medium: { name: 'Medium', shadow: 1024, shadowEvery: 1, bloom: 0.75, mirror: false, lights: 4, grass: 0.7, smoke: true, outline: 0.5 },
-  high: { name: 'High', shadow: 2048, shadowEvery: 1, bloom: 0.9, mirror: true, lights: 6, grass: 1, smoke: true, outline: 0.5 },
+  low: { name: 'Low', shadow: 1024, shadowEvery: 2, bloom: 0, mirror: false, lights: 2, grass: 0.35, smoke: false, outline: 0.45, ambient: 0.4, tilt: 0, haze: 0.1, split: 0.15 },
+  medium: { name: 'Medium', shadow: 1024, shadowEvery: 1, bloom: 0.75, mirror: false, lights: 4, grass: 0.7, smoke: true, outline: 0.5, ambient: 0.7, tilt: 0.4, haze: 0.13, split: 0.2 },
+  high: { name: 'High', shadow: 2048, shadowEvery: 1, bloom: 0.9, mirror: true, lights: 6, grass: 1, smoke: true, outline: 0.5, ambient: 1, tilt: 0.55, haze: 0.14, split: 0.22 },
 };
 // Below the low tier the game gives up detail in this order (Perf.extraPixel):
 //   1 = drop the crease highlights (the costliest part of the pixel pass), same resolution

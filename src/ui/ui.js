@@ -62,7 +62,7 @@ export class UI {
             <div class="chip" id="c-happy">${icon('happy')}<span>0%</span></div>
           </div>
           <div class="spacer"></div>
-          <button class="chip clock" data-act="speed" id="c-clock">${icon('sun')}<span>Day 1 · 08:00</span><em id="c-speed">1x</em></button>
+          <button class="chip clock" data-act="speed" id="c-clock">${icon('sun')}<i id="c-season" class="season">${icon('flower')}</i><span>Day 1 · 08:00</span><em id="c-speed">1x</em></button>
           <button class="ibtn" data-act="settings">${icon('gear')}</button>
         </div>
         <div class="hud-row res" id="resbar" data-act="inventory"></div>
@@ -240,6 +240,12 @@ export class UI {
     $('#c-clock img').src = iconURL(w === 'clear' ? (night ? 'moon' : 'sun') : WEATHER_ICON[w]);
     $('#c-clock span').textContent = `Day ${T.day} · ${pad2(T.hour)}:${pad2((T.hour % 1) * 60)}`;
     $('#c-speed').textContent = `${s.settings.speed}x`;
+    const SD = g.seasonDef();
+    if (this._seasonId !== SD.id) {
+      this._seasonId = SD.id;
+      $('#c-season img').src = iconURL(SD.icon);
+      $('#c-season').title = SD.name;
+    }
     // resources: always the basics, plus anything the player owns
     const cap = g.storageCap();
     const keys = RES_KEYS.filter((k) => ['wood', 'stone', 'food'].includes(k) || s.res[k] > 0);
@@ -1341,6 +1347,8 @@ export class UI {
       <div class="setting"><span>Pixel size</span><div class="segs">${opt('pixel', 0.75, 'Fine')}${opt('pixel', 1, 'Medium')}${opt('pixel', 1.4, 'Chunky')}</div></div>
       <div class="setting"><span>Game speed</span><div class="segs">${opt('speed', 1, '1x')}${opt('speed', 2, '2x')}${opt('speed', 3, '3x')}</div></div>
       <div class="setting"><span>Vibration</span><div class="segs">${opt('haptics', true, 'On')}${opt('haptics', false, 'Off')}</div></div>
+      <div class="setting"><span>Screen shake</span><div class="segs">${opt('shake', true, 'On')}${opt('shake', false, 'Off')}</div></div>
+      <div class="setting"><span>Miniature focus</span><div class="segs">${opt('tilt', true, 'On')}${opt('tilt', false, 'Off')}</div></div>
       <div class="setting"><span>Show FPS</span><div class="segs">${opt('fps', true, 'Yes')}${opt('fps', false, 'No')}</div></div>
       <div class="btns"><button class="btn" data-act="credits">${icon('info')} Credits & Licenses</button><button class="btn danger" data-act="wipe">${icon('trash')} Delete Data</button></div>
       <p class="muted center">Pixel Diorama: World Builder v${this.app.version} · Fully offline. No ads, no in-app purchases.</p>`;

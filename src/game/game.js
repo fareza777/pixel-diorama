@@ -3,6 +3,7 @@
 import {
   RES, RES_KEYS, BIOMES, BIOME_KEYS, BUILDINGS, MAX_LEVEL, upgradeCost, RECIPES, TOOL_TIERS, NODES, FIRST_NAMES, TRAITS,
   QUESTS, ACHIEVEMENTS, EVENTS, EVENT_BY_ID, xpForLevel, MAX_PLAYER_LEVEL, DAILY_REWARDS, START, PAINTS,
+  SEASONS, SEASON_DAYS, WALKABLE_TYPES,
 } from './data.js';
 import { N, idx, inside, generateIsland, packIsland, unpackIsland, WALKABLE, ROADS, STEP } from './island.js';
 import { randomLook } from './people.js';
@@ -13,7 +14,9 @@ export const SAVE_VERSION = 1;
 export const SECONDS_PER_GAME_HOUR = 30; // a full day takes 12 real minutes at 1x
 const OFFLINE_CAP_S = 8 * 3600;
 const OFFLINE_EFF = 0.4;
-const WALKABLE_BUILDINGS = new Set(['ladang', 'taman', 'pasar']);
+const WALKABLE_BUILDINGS = new Set(WALKABLE_TYPES);
+// buildings that turn raw goods into crafted ones (count for the Industrialist achievement)
+const CHAIN_TYPES = new Set(['penggergajian', 'tungku', 'kaca']);
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const NO_FX = Object.freeze({});
@@ -56,7 +59,7 @@ export class Game {
       seed,
       player: { name: 'Mayor', level: 1, xp: 0, coins: START.coins, tool: 0 },
       res: Object.fromEntries(RES_KEYS.map((k) => [k, START.res[k] || 0])),
-      stats: { built: 0, gathered: 0, crafted: 0, sold: 0, talked: 0, gifts: 0, quests: 0, events: 0, chests: 0, cats: 0, landmarks: 0, days: 0, essence: 0, upgrades: 0 },
+      stats: { built: 0, gathered: 0, crafted: 0, sold: 0, talked: 0, gifts: 0, quests: 0, events: 0, chests: 0, cats: 0, landmarks: 0, days: 0, essence: 0, upgrades: 0, seasons: 0, chained: 0, learned: 0 },
       quests: { done: [], base: {} },
       ach: {},
       daily: { last: '', streak: 0 },
@@ -68,7 +71,7 @@ export class Game {
       event: null,
       eventCd: 6,
       weather: {},
-      settings: { sound: true, music: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true },
+      settings: { sound: true, music: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true, shake: true, tilt: true },
       tips: 0,
       tutorial: 0,
       furn: {}, // furniture in storage: id -> count
@@ -263,6 +266,7 @@ export class Game {
   _jobPriority(b, lowFood) {
     const def = BUILDINGS[b.type];
     if (def.produce?.food) return lowFood ? 10 : 5;
+    if (def.consume || def.produce?.xp) return 2;
     if (def.produce?.coins) return 3;
     if (def.produce) return 4;
     return 1;
@@ -540,6 +544,7 @@ export class Game {
     if (n.hp < 0) n.hp = def.hp;
     let y = TOOL_TIERS[this.s.player.tool].yield;
     if (this.isRested()) y += 1;
+    y += this.evFx().gatherBonus || 0;
     const items = { [def.res]: y };
     if (def.bonus && this.rand() < 0.35) Object.assign(items, def.bonus);
     if (this.rand() < 0.04) items.coins = 5 + Math.floor(this.rand() * 15);
@@ -627,7 +632,7 @@ export class Game {
       if (hs.sleeps < this.residentsOf(home)) env -= 8;
     }
     const job = p.job ? 8 : this.I.npcs.length < 3 ? 4 : -6;
-    let ev = fx.mood || 0;
+    let ev = (fx.mood || 0) + (this.seasonDef().mood || 0);
     if (evNow) {
       if (sick) ev -= 8;
       if (fx.burnWood && evNow.warm !== undefined) ev += evNow.warm ? 5 : -8;
@@ -789,14 +794,51 @@ export class Game {
    * Advance the world clock and run hourly rules for the active island.
    * presence: Map buildingId -> workers on site (from the NPC simulation)
    */
+  // ---------------------------------------------------------------- seasons
+
+  /** Season index 0..3 (spring, summer, autumn, winter) for a day number. */
+  seasonIndex(day = this.s.time.day) {
+    return Math.floor((Math.max(1, day) - 1) / SEASON_DAYS) % SEASONS.length;
+  }
+  season() {
+    return SEASONS[this.seasonIndex()].id;
+  }
+  seasonDef() {
+    return SEASONS[this.seasonIndex()];
+  }
+  /** Day within the season (1..SEASON_DAYS). */
+  seasonDay() {
+    return ((Math.max(1, this.s.time.day) - 1) % SEASON_DAYS) + 1;
+  }
+  /**
+   * Season weights for the visuals: [spring, summer, autumn, winter], blending into the next
+   * season over the last half day of each one.
+   */
+  seasonBlend(out = [0, 0, 0, 0]) {
+    const T = this.s.time;
+    const d = (Math.max(1, T.day) - 1) + T.hour / 24;
+    const pos = d / SEASON_DAYS;
+    const i = Math.floor(pos) % 4, f = pos - Math.floor(pos);
+    const k = Math.min(1, Math.max(0, (f * SEASON_DAYS - (SEASON_DAYS - 0.5)) / 0.5));
+    out.fill(0);
+    out[i] += 1 - k;
+    out[(i + 1) % 4] += k;
+    return out;
+  }
+
   tick(dtH, presence) {
     const T = this.s.time;
     const prevHour = Math.floor(T.hour);
     T.hour += dtH;
     if (T.hour >= 24) {
       T.hour -= 24;
+      const before = this.seasonIndex(T.day);
       T.day++;
       this.s.stats.days++;
+      if (this.seasonIndex(T.day) !== before) {
+        this.s.stats.seasons = (this.s.stats.seasons || 0) + 1;
+        this.emit('season', this.seasonDef());
+      }
       // a quiet daily bonus: XP for every resident
       this.addXp(Math.max(5, this.population()));
       this.emit('newday', T.day);
@@ -809,9 +851,9 @@ export class Game {
   multipliers(res) {
     return this.eventMult(res) * this.baseMult(res);
   }
-  baseMult(res) {
-    const bonus = BIOMES[this.biome].bonus || {};
-    return bonus[res] || 1;
+  baseMult(res, biome = this.biome) {
+    const bonus = BIOMES[biome].bonus || {};
+    return (bonus[res] || 1) * (this.seasonDef().prod[res] || 1);
   }
   /** Production multiplier from the running event on this island (res: resource key or 'coin'). */
   eventMult(res) {
@@ -838,13 +880,25 @@ export class Game {
     return 1 + Math.min(0.6, n * 0.06);
   }
 
-  windmillBoost(b) {
+  /** Boost from windmills, water towers and the like in range of building b (capped at x1.9). */
+  boostOf(b, I = this.I) {
     let m = 1;
-    for (const w of this.I.buildings) {
-      if (w.type !== 'kincir' || !w.built) continue;
-      if (Math.hypot(w.i - b.i, w.j - b.j) <= BUILDINGS.kincir.boost.radius) m += BUILDINGS.kincir.boost.amount;
+    for (const w of I.buildings) {
+      const bo = BUILDINGS[w.type].boost;
+      if (!bo || !w.built) continue;
+      const types = Array.isArray(bo.type) ? bo.type : [bo.type];
+      if (!types.includes(b.type)) continue;
+      if (Math.hypot(w.i - b.i, w.j - b.j) <= bo.radius) m += bo.amount;
     }
     return Math.min(m, 1.9);
+  }
+  windmillBoost(b) {
+    return this.boostOf(b);
+  }
+  /** Is building b within range of a built building of type t? */
+  inRangeOf(b, t, I = this.I) {
+    const r = BUILDINGS[t]?.boost?.radius ?? 5;
+    return I.buildings.some((w) => w.type === t && w.built && Math.hypot(w.i - b.i, w.j - b.j) <= r);
   }
 
   produce(dtH, presence) {
@@ -863,20 +917,49 @@ export class Game {
         const lvl = 1 + 0.5 * ((b.level || 1) - 1);
         let k = workers * lvl * moodK * dtH;
         if (def.nearNode) k *= this.nodeBonus(b, def.nearNode);
-        if (b.type === 'ladang') k *= this.windmillBoost(b);
+        k *= this.boostOf(b);
+        // processing buildings use up their inputs from storage; without them they stall
+        if (def.consume) {
+          let f = 1;
+          for (const [r, rate] of Object.entries(def.consume)) f = Math.min(f, (this.s.res[r] || 0) / Math.max(1e-6, rate * k));
+          f = Math.max(0, Math.min(1, f));
+          b.stalled = f < 0.05;
+          if (f <= 0) continue;
+          k *= f;
+          b.used ||= {};
+          for (const [r, rate] of Object.entries(def.consume)) {
+            b.used[r] = (b.used[r] || 0) + rate * k;
+            if (b.used[r] >= 1) {
+              const n = Math.min(Math.floor(b.used[r]), this.s.res[r] || 0);
+              b.used[r] -= n;
+              this.s.res[r] -= n;
+            }
+          }
+        }
         const tm = fx.type?.[b.type] ?? 1;
         for (const [r, rate] of Object.entries(def.produce)) {
           const rk = r === 'coins' ? 'coin' : r;
-          const base = rate * k * this.baseMult(rk);
-          const em = ev ? this.eventMult(rk) * tm : 1;
+          const base = rate * k * (r === 'xp' ? 1 : this.baseMult(rk));
+          let em = ev ? this.eventMult(rk) * tm : 1;
+          // a water tower keeps its fields green through a dry spell
+          if (ev?.id === 'drought' && r === 'food' && this.inRangeOf(b, 'menara_air')) em = Math.max(em, 1);
           b.acc[r] = (b.acc[r] || 0) + base * em;
           // what the event added, for the summary when it ends
           if (em > 1) ev.gain[r] = (ev.gain[r] || 0) + base * (em - 1);
           if (b.acc[r] >= 1) {
             const n = Math.floor(b.acc[r]);
             b.acc[r] -= n;
+            if (r === 'xp') {
+              this.addXp(n);
+              this.s.stats.learned = (this.s.stats.learned || 0) + n;
+              this.emit('produce', { b, res: 'xp', n });
+              continue;
+            }
             const got = this.give({ [r]: n }, { silent: true });
-            if (got[r]) this.emit('produce', { b, res: r, n: got[r] });
+            if (got[r]) {
+              if (CHAIN_TYPES.has(b.type)) this.s.stats.chained = (this.s.stats.chained || 0) + got[r];
+              this.emit('produce', { b, res: r, n: got[r] });
+            }
           }
         }
       }
@@ -958,7 +1041,15 @@ export class Game {
     const forced = ev && ev.island === this.biome ? EVENT_BY_ID[ev.id]?.fx?.weather : null;
     if (forced) name = forced;
     else {
-      const entries = Object.entries(B.weather);
+      const S = this.seasonDef();
+      const table = { ...B.weather };
+      if (S.add && !S.noSnow?.includes(this.biome)) for (const [k, v] of Object.entries(S.add)) table[k] = (table[k] || 0) + v;
+      for (const k of Object.keys(table)) {
+        table[k] *= S.weather?.[k] ?? 1;
+        if (k === 'snow' && S.noSnow?.includes(this.biome)) table[k] = 0;
+      }
+      if (!Object.values(table).some((w) => w > 0)) table.clear = 1;
+      const entries = Object.entries(table).filter(([, w]) => w > 0);
       const total = entries.reduce((a, [, w]) => a + w, 0);
       let r = Math.random() * total;
       name = entries[0][0];
@@ -1019,6 +1110,7 @@ export class Game {
       if (a <= b ? h < a || h >= b : h < a && h >= b) return false;
     }
     if (e.biomes && !e.biomes.includes(this.biome)) return false;
+    if (e.seasons && !e.seasons.includes(this.season())) return false;
     if (e.notBiomes && e.notBiomes.includes(this.biome)) return false;
     if (e.weatherIn && !e.weatherIn.includes(w)) return false;
     if (e.notWeather && e.notWeather.includes(w)) return false;
@@ -1202,10 +1294,14 @@ export class Game {
       for (const id of [...ev.sick]) {
         const p = I.npcs.find((q) => q.id === id);
         if (!p) this._cure(ev, id, false);
-        else if (p.need.food > 60 && p.need.energy > 55 && Math.random() < 0.2) this._cure(ev, id, false, p);
+        else if (this._hasClinic(I) ? p.need.food > 40 && Math.random() < 0.55 : p.need.food > 60 && p.need.energy > 55 && Math.random() < 0.2) this._cure(ev, id, false, p);
         if (this.s.event !== ev) break;
       }
     }
+  }
+
+  _hasClinic(I = this.I) {
+    return I.buildings.some((b) => BUILDINGS[b.type].clinic && b.built);
   }
 
   _cure(ev, id, byMayor, p = null) {
@@ -1544,7 +1640,21 @@ export class Game {
       const w = workers.get(b.id) || 0;
       if (def.produce && w) {
         const lvl = 1 + 0.5 * ((b.level || 1) - 1);
-        for (const [r, rate] of Object.entries(def.produce)) add(r, rate * w * lvl * moodK * (9 / 24) * hours * eff * (bonus[r] || 1));
+        let k = w * lvl * moodK * (9 / 24) * hours * eff;
+        if (def.consume) {
+          // limited by what is in storage
+          let f = 1;
+          for (const [r, rate] of Object.entries(def.consume)) f = Math.min(f, (this.s.res[r] || 0) / Math.max(1e-6, rate * k));
+          f = Math.max(0, Math.min(1, f));
+          k *= f;
+          for (const [r, rate] of Object.entries(def.consume)) this.s.res[r] = Math.max(0, (this.s.res[r] || 0) - Math.round(rate * k));
+        }
+        const sp = SEASONS[this.seasonIndex()].prod;
+        for (const [r, rate] of Object.entries(def.produce)) {
+          const rk = r === 'coins' ? 'coin' : r;
+          if (r === 'xp') add('xp', rate * k);
+          else add(r, rate * k * (bonus[rk] || 1) * (sp[rk] || 1));
+        }
       }
       if (def.housing) {
         const residents = I.npcs.filter((p) => p.home === b.id).length;
@@ -1555,6 +1665,10 @@ export class Game {
     add('food', -I.npcs.length * (3 / 24) * hours);
     const out = {};
     for (const [r, v] of Object.entries(got)) out[r] = Math.round(v);
+    if (out.xp) {
+      this.addXp(out.xp);
+      delete out.xp;
+    }
     if (out.food < 0) {
       this.s.res.food = Math.max(0, this.s.res.food + out.food);
       delete out.food;
@@ -1603,6 +1717,8 @@ export class Game {
       case 'upgrade': return [S.upgrades - (base.upgrades || 0), g.n];
       case 'level': return [this.s.player.level, g.n];
       case 'island': return [this.s.islands[g.id] ? 1 : 0, 1];
+      case 'seasons': return [(S.seasons || 0) - (base.seasons || 0), g.n];
+      case 'chain': return [Object.values(this.s.islands).reduce((a, I) => a + I.buildings.filter((b) => CHAIN_TYPES.has(b.type) && b.built).length, 0), g.n];
       case 'happy': return [Math.round(Math.max(...Object.values(this.s.islands).map((I) => this.islandHappiness(I)))), g.n];
       default: return [0, 1];
     }

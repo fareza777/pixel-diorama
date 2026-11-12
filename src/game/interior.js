@@ -793,6 +793,11 @@ export class Interior {
     P.moon = 0;
     P.tint.set('#fff6ea').lerp(C('#dfe2ff'), night * 0.6);
     P.exposure = 1.05;
+    // indoors: no aerial haze, a softer miniature focus, house plants stay green
+    P.haze = 0;
+    P.tilt = 0.6;
+    P.split = 0.6;
+    shared.uSeasonAmt.value = 0;
     shared.uCloudShadow.value = 0;
     shared.uSnow.value = 0;
     shared.uWet.value = 0;

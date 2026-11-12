@@ -162,7 +162,7 @@ export function terrain({ size = 16, cells = 40, height, step = 0.3, base = -3, 
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
-  const m = mesh(g, toon('#ffffff', { vertexColors: true, noise: 0.16, noiseScale: 2.6 }));
+  const m = mesh(g, toon('#ffffff', { vertexColors: true, noise: 0.16, noiseScale: 2.6, foliage: 0.5 }));
   const heightAt = (x, z) => {
     const i = Math.min(cells - 1, Math.max(0, Math.floor((x + half) / cs)));
     const j = Math.min(cells - 1, Math.max(0, Math.floor((z + half) / cs)));
@@ -296,7 +296,7 @@ export function grass(rand, count, place, colors = ['#78bb5b', '#68a94f', '#8bc8
     blades.push(c);
   }
   const geo = merge(blades);
-  const m = new THREE.InstancedMesh(geo, toon('#ffffff', { wind: 1.1, noise: 0, snow: 0.5, ramp: 'foliage' }), count);
+  const m = new THREE.InstancedMesh(geo, toon('#ffffff', { wind: 1.1, noise: 0, snow: 0.5, ramp: 'foliage', foliage: 0.75 }), count);
   m.castShadow = false;
   m.receiveShadow = true;
   const dummy = new THREE.Object3D();

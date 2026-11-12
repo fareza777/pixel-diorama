@@ -20,8 +20,8 @@ export const mats = {
   solid: () => sharedMat('solid', () => toon('#ffffff', { vertexColors: true, noise: 0.12, noiseScale: 3.2 })),
   rough: () => sharedMat('rough', () => toon('#ffffff', { vertexColors: true, noise: 0.22, noiseScale: 5.5 })),
   smooth: () => sharedMat('smooth', () => toon('#ffffff', { vertexColors: true, noise: 0.03, snow: 0.6 })),
-  leaf: () => sharedMat('leaf', () => toon('#ffffff', { vertexColors: true, ramp: 'foliage', wind: 0.05, noise: 0.18, noiseScale: 4 })),
-  crop: () => sharedMat('crop', () => toon('#ffffff', { vertexColors: true, ramp: 'foliage', wind: 0.9, noise: 0.1, noiseScale: 6, snow: 0.6 })),
+  leaf: () => sharedMat('leaf', () => toon('#ffffff', { vertexColors: true, ramp: 'foliage', wind: 0.05, noise: 0.18, noiseScale: 4, foliage: 1 })),
+  crop: () => sharedMat('crop', () => toon('#ffffff', { vertexColors: true, ramp: 'foliage', wind: 0.9, noise: 0.1, noiseScale: 6, snow: 0.6, foliage: 0.85 })),
   win: () =>
     sharedMat('win', () =>
       toon('#ffffff', {
@@ -380,7 +380,11 @@ function balai(b, c, level, biome) {
     b.hip(0.36, 0.3, c.roof, 0, 1.3, -0.05);
   }
   b.cyl(0.015, 0.015, 0.9, DARK, 0.75, 0.08, 0.7);
-  b.box(0.22, 0.12, 0.01, '#e94f4f', 0.86, 0.8, 0.7, {}, 'smooth');
+  const flag = new THREE.Group();
+  flag.add(partMesh(new THREE.BoxGeometry(0.22, 0.12, 0.01).translate(0.11, 0.06, 0), '#e94f4f', mats.smooth()));
+  flag.position.set(0.755, 0.8, 0.7);
+  flag.userData.flag = 1;
+  b.part(flag);
   b.glowBox(0.1, 0.12, 0.1, '#ffc36b', 6, -0.75, 0.6, 0.7);
   b.cyl(0.03, 0.04, 0.6, DARK, -0.75, 0, 0.7);
   b.light(-0.75, 0.7, 0.7);
@@ -514,7 +518,10 @@ function kristal(b, c, level) {
   b.cyl(0.24, 0.14, 0.08, '#7b3dff', 0, top, 0, {}, 'solid', 8);
   const g = new THREE.OctahedronGeometry(0.16, 0);
   g.scale(0.8, 1.5, 0.8);
-  b.add('glow|#7df9ff|7|#4a9ad0|1', g, '#ffffff', { x: 0, y: top + 0.32, z: 0 });
+  const gem = new THREE.Mesh(g, mats.glow('#7df9ff', 7, '#4a9ad0', true));
+  gem.position.set(0, top + 0.32, 0);
+  gem.userData.float = 1;
+  b.part(gem);
   for (let k = 0; k < 3; k++) {
     const s = new THREE.OctahedronGeometry(0.07, 0);
     s.scale(0.7, 1.6, 0.7);
@@ -821,10 +828,266 @@ function pohonKehidupan(b, c, level, biome, rand) {
   b.light(0, 1.6, 0.6, '#c9a0ff', 3.5);
 }
 
+// ---------------------------------------------------------------- v1.1 buildings
+
+/** A painted mesh for animated parts (not merged), using a shared material. */
+function partMesh(geo, color, mat = mats.solid()) {
+  const g = clean(geo);
+  paint(g, color);
+  const m = new THREE.Mesh(g, mat);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+function peternakan(b, c, level, biome) {
+  const ground = biome === 'gurun' ? '#d8b98a' : '#a88a5a';
+  b.box(0.9, 0.035, 0.9, ground, 0, 0, 0, {}, 'rough');
+  // the coop on stilts
+  for (const [x, z] of [[-0.3, -0.32], [0.08, -0.32], [-0.3, -0.04], [0.08, -0.04]]) b.box(0.035, 0.14, 0.035, WOOD_D, x, 0.03, z);
+  b.box(0.46, 0.26, 0.36, c.wall === STYLE.desa.wall ? '#c9533f' : c.wall, -0.11, 0.17, -0.18);
+  b.prism(0.5, 0.42, 0.16, c.roof, -0.11, 0.43, -0.18);
+  b.box(0.1, 0.12, 0.02, '#2a2230', -0.11, 0.2, 0.01);
+  b.box(0.1, 0.02, 0.26, WOOD, -0.11, 0.1, 0.12, { rx: 0.5 });
+  // nest box with straw and eggs
+  b.box(0.22, 0.1, 0.16, WOOD, 0.26, 0.035, -0.26);
+  b.box(0.2, 0.03, 0.14, '#e8cf6a', 0.26, 0.135, -0.26, {}, 'leaf');
+  for (let k = 0; k < 2 + level; k++) b.ball(0.025, '#f8f1e2', 0.2 + k * 0.05, 0.16, -0.26, { sy: 1.25 }, 'smooth', 0);
+  // trough and a low fence
+  b.box(0.3, 0.06, 0.08, WOOD_D, 0.18, 0.035, 0.22);
+  b.box(0.26, 0.02, 0.05, '#e8c860', 0.18, 0.085, 0.22, {}, 'rough');
+  for (let k = -3; k <= 3; k++) {
+    b.box(0.025, 0.12, 0.025, '#efe6d6', k * 0.14, 0.03, 0.42);
+    b.box(0.025, 0.12, 0.025, '#efe6d6', 0.42, 0.03, k * 0.14);
+  }
+  b.box(0.86, 0.02, 0.02, '#efe6d6', 0, 0.11, 0.42);
+  b.box(0.02, 0.02, 0.86, '#efe6d6', 0.42, 0.11, 0);
+  b.light(0.1, 0.35, 0.3, '#ffcf8a', 1.6);
+}
+
+function kebun(b, c, level, biome, rand) {
+  const grass = biome === 'fantasi' ? '#b48ae8' : '#79b65a';
+  b.box(1.85, 0.04, 1.85, grass, 0, 0, 0, {}, 'leaf');
+  const fruit = biome === 'fantasi' ? ['#7df9ff', '#ff8af0'] : biome === 'pantai' ? ['#ffb21f', '#7fb84e'] : ['#e94f4f', '#ffb21f'];
+  const n = level >= 2 ? 3 : 2;
+  const step = n === 3 ? 0.58 : 0.8;
+  for (let a = 0; a < n; a++)
+    for (let z = 0; z < n; z++) {
+      const x = (a - (n - 1) / 2) * step + (rand() - 0.5) * 0.08, zz = (z - (n - 1) / 2) * step + (rand() - 0.5) * 0.08;
+      b.cyl(0.035, 0.05, 0.3, '#7a5236', x, 0.04, zz, {}, 'rough', 6);
+      const r = 0.2 + rand() * 0.05;
+      b.ball(r, k2(rand), x, 0.42, zz, { sy: 0.85 }, 'leaf', 1);
+      for (let f = 0; f < 4; f++) {
+        const ang = rand() * Math.PI * 2;
+        b.ball(0.035, fruit[f % 2], x + Math.cos(ang) * r * 0.85, 0.36 + rand() * 0.14, zz + Math.sin(ang) * r * 0.85, {}, 'smooth', 0);
+      }
+    }
+  // baskets of picked fruit and a ladder
+  for (const [x, z] of [[0.75, 0.78], [0.6, 0.82]]) {
+    b.cyl(0.07, 0.06, 0.08, '#b08454', x, 0.04, z, {}, 'rough', 8);
+    b.ball(0.05, fruit[0], x, 0.12, z, {}, 'smooth', 0);
+  }
+  b.box(0.05, 0.42, 0.02, WOOD, -0.78, 0.04, 0.78, { rz: 0.25 });
+}
+function k2(rand) {
+  return rand() < 0.5 ? '#4d8f45' : '#5a9e4b';
+}
+
+function penggergajian(b, c, level) {
+  b.box(0.9, 0.04, 0.9, '#8a6a4a', 0, 0, 0, {}, 'rough');
+  // open shed: back wall, posts and a sloped roof
+  b.box(0.7, 0.42, 0.06, c.wall === STYLE.desa.wall ? WOOD : c.wall, 0, 0.04, -0.33, {}, 'rough');
+  for (const x of [-0.33, 0.33]) b.box(0.05, 0.46, 0.05, WOOD_D, x, 0.04, 0.12);
+  b.box(0.8, 0.04, 0.6, c.roof, 0, 0.5, -0.1, { rx: 0.14 }, 'rough');
+  // saw bench and the spinning blade
+  b.box(0.5, 0.16, 0.16, WOOD_D, 0, 0.04, -0.05);
+  b.cyl(0.04, 0.04, 0.46, '#a77c52', -0.05, 0.24, -0.05, { rz: Math.PI / 2 });
+  const blade = partMesh(new THREE.CylinderGeometry(0.1, 0.1, 0.012, 12), '#c8cdd6', mats.smooth());
+  blade.rotation.x = Math.PI / 2;
+  const hub = new THREE.Group();
+  hub.add(blade);
+  hub.position.set(0.12, 0.24, -0.05);
+  hub.userData.spin = 'saw';
+  b.part(hub);
+  // log pile and planks
+  for (let k = 0; k < 3 + level; k++) b.cyl(0.055, 0.055, 0.42, k % 2 ? '#a77c52' : '#8a6040', -0.26 + (k % 3) * 0.11, 0.09 + Math.floor(k / 3) * 0.1, 0.32, { rz: Math.PI / 2, ry: Math.PI / 2 });
+  for (let k = 0; k < 3; k++) b.box(0.4, 0.025, 0.1, '#d8b080', 0.24, 0.04 + k * 0.03, 0.3, { ry: 0.1 * k });
+  b.box(0.08, 0.3, 0.08, '#6a6e78', 0.28, 0.5, -0.3, {}, 'rough');
+  b.smoke.push(new THREE.Vector3(0.28, 0.85, -0.3));
+  b.light(0, 0.35, 0.3, '#ffcf8a', 1.8);
+}
+
+function tungku(b, c, level) {
+  const brick = '#b8603f';
+  b.box(0.9, 0.04, 0.9, '#8d7a6a', 0, 0, 0, {}, 'rough');
+  b.dome(0.32, brick, -0.05, 0.04, -0.08, { sy: 1.15 }, 'rough', 10);
+  b.cyl(0.33, 0.33, 0.08, shade(brick, 0.8), -0.05, 0.04, -0.08, {}, 'rough', 10);
+  b.box(0.16, 0.14, 0.06, '#2a1a14', -0.05, 0.06, 0.22);
+  b.glowBox(0.12, 0.1, 0.03, '#ff7a2a', 6, -0.05, 0.07, 0.25, {}, '#ff7a2a', true);
+  b.cyl(0.06, 0.08, 0.55, shade(brick, 0.9), -0.05, 0.38, -0.15, {}, 'rough', 6);
+  b.smoke.push(new THREE.Vector3(-0.05, 1.0, -0.15));
+  // brick stacks and firewood
+  for (let k = 0; k < 2 + level; k++) b.box(0.18, 0.08, 0.1, brick, 0.3, 0.04 + (k % 3) * 0.08, 0.25 - Math.floor(k / 3) * 0.14, {}, 'rough');
+  for (let k = 0; k < 4; k++) b.cyl(0.03, 0.03, 0.28, '#8a6040', 0.3, 0.06 + (k % 2) * 0.06, -0.3 + Math.floor(k / 2) * 0.07, { rz: Math.PI / 2, ry: Math.PI / 2 });
+  b.light(-0.05, 0.2, 0.4, '#ff8a3d', 2.4);
+}
+
+function kaca(b, c, level) {
+  b.box(0.9, 0.04, 0.9, c.stone, 0, 0, 0, {}, 'rough');
+  b.box(0.62, 0.42, 0.5, c.wall, -0.05, 0.04, -0.12, {}, 'rough');
+  b.gable(0.62, 0.5, 0.46, c.wall, c.roof, { pitch: 0.5, x: -0.05, z: -0.12 });
+  b.cone(0.14, 0.7, '#8a8d98', 0.18, 0.46, -0.2, {}, 'rough', 8);
+  b.smoke.push(new THREE.Vector3(0.18, 1.2, -0.2));
+  // the furnace mouth glows, glass cools on racks outside
+  b.box(0.2, 0.18, 0.04, '#1f1a20', -0.18, 0.04, 0.14);
+  b.glowBox(0.16, 0.14, 0.03, '#ffb04a', 7, -0.18, 0.05, 0.16, {}, '#ffb04a', true);
+  windowPane(b, 0.15, 0.24, 0.14, 0, c.trim, 0.12);
+  b.box(0.04, 0.3, 0.3, WOOD_D, 0.36, 0.04, 0.22);
+  for (let k = 0; k < 2 + level; k++) b.box(0.02, 0.16, 0.12, k % 2 ? '#bfe9ff' : '#9fd8f0', 0.36 - 0.04, 0.12 + (k % 2) * 0.01, 0.12 + k * 0.08 - 0.08, {}, 'smooth');
+  b.light(-0.18, 0.2, 0.4, '#ffb04a', 2.6);
+}
+
+function klinik(b, c, level) {
+  b.box(0.9, 0.04, 0.9, '#c9ccd4', 0, 0, 0, {}, 'rough');
+  const h = 0.5 + (level - 1) * 0.12;
+  b.box(0.7, h, 0.56, '#f4f6fb', 0, 0.04, -0.08);
+  b.box(0.76, 0.06, 0.62, '#c9d2dc', 0, 0.04 + h, -0.08);
+  // red cross on the front and on the roof
+  b.box(0.16, 0.05, 0.02, '#e0303a', 0, 0.04 + h * 0.72, 0.21, {}, 'smooth');
+  b.box(0.05, 0.16, 0.02, '#e0303a', 0, 0.04 + h * 0.72 - 0.055, 0.21, {}, 'smooth');
+  b.box(0.22, 0.02, 0.07, '#e0303a', 0, 0.1 + h, -0.08, {}, 'smooth');
+  b.box(0.07, 0.02, 0.22, '#e0303a', 0, 0.1 + h, -0.08, {}, 'smooth');
+  door(b, 0.2, 0.21, 0, '#7fb8d8', 0.28, 0.16);
+  windowPane(b, -0.2, 0.22, 0.21, 0, '#c9d2dc', 0.14);
+  windowPane(b, 0.36, 0.22, -0.08, Math.PI / 2, '#c9d2dc', 0.14);
+  b.box(0.16, 0.02, 0.2, '#c9d2dc', 0.2, 0.36, 0.3);
+  b.glowBox(0.05, 0.05, 0.05, '#ff4a4a', 6, -0.33, 0.04 + h - 0.05, 0.21);
+  b.light(0.2, 0.32, 0.45, '#e8f4ff', 2);
+}
+
+function sekolah(b, c, level) {
+  b.box(1.85, 0.04, 1.85, '#c9b48a', 0, 0, 0, {}, 'rough');
+  const h = 0.45 + (level - 1) * 0.15;
+  b.box(1.4, h, 0.6, c.wall, -0.1, 0.04, -0.45);
+  b.gable(1.4, 0.6, 0.04 + h, c.wall, c.roof, { x: -0.1, z: -0.45 });
+  for (let k = 0; k < 4; k++) windowPane(b, -0.65 + k * 0.32, 0.26, -0.14, 0, c.trim, 0.14);
+  door(b, 0.45, -0.14, 0, c.trim, 0.32, 0.18);
+  // bell tower with a bell
+  b.box(0.22, 0.32, 0.22, c.wall, -0.1, 0.04 + h + 0.2, -0.45);
+  b.hip(0.32, 0.22, c.roof, -0.1, 0.36 + h + 0.2, -0.45);
+  b.cone(0.06, 0.08, '#e2b33c', -0.1, 0.14 + h + 0.2, -0.33, {}, 'smooth', 8);
+  // flagpole with an animated flag
+  b.cyl(0.015, 0.015, 1.0, '#c8cdd6', 0.75, 0.04, 0.55);
+  const flag = new THREE.Group();
+  const cloth = partMesh(new THREE.BoxGeometry(0.24, 0.14, 0.01).translate(0.12, 0, 0), '#e94f4f', mats.smooth());
+  flag.add(cloth);
+  flag.position.set(0.765, 0.94, 0.55);
+  flag.userData.flag = 1;
+  b.part(flag);
+  // a little sports yard
+  b.box(0.7, 0.01, 0.5, '#d89a5a', -0.35, 0.04, 0.45, {}, 'rough');
+  b.box(0.02, 0.3, 0.02, '#efe6d6', -0.68, 0.04, 0.45);
+  b.box(0.12, 0.1, 0.02, '#efe6d6', -0.68, 0.32, 0.45);
+  b.light(0.45, 0.35, 0.1);
+}
+
+function perpustakaan(b, c, level) {
+  b.box(0.9, 0.06, 0.9, '#d8d0c0', 0, 0, 0, {}, 'rough');
+  b.box(0.76, 0.06, 0.4, '#e8e0d0', 0, 0.06, 0.24, {}, 'rough');
+  b.box(0.7, 0.48, 0.5, c.wall === STYLE.desa.wall ? '#e8dcc8' : c.wall, 0, 0.06, -0.12, {}, 'rough');
+  for (let k = 0; k < 4; k++) b.cyl(0.035, 0.035, 0.42, '#f4f1ea', -0.27 + k * 0.18, 0.12, 0.19, {}, 'smooth', 8);
+  b.box(0.78, 0.06, 0.24, '#f4f1ea', 0, 0.54, 0.16);
+  b.prism(0.78, 0.24, 0.12, '#f4f1ea', 0, 0.6, 0.16);
+  b.hip(0.62, 0.22, c.roof, 0, 0.54, -0.12);
+  // book-lined windows glow warm in the evening
+  for (const x of [-0.18, 0.18]) {
+    b.box(0.16, 0.24, 0.02, '#3a2a20', x, 0.18, 0.135);
+    b.glowBox(0.12, 0.2, 0.02, '#ffd28a', 3.5, x, 0.2, 0.14);
+    for (let s = 0; s < 3; s++) b.box(0.13, 0.015, 0.025, ['#c94a3d', '#3f6fb0', '#e2b33c'][s], x, 0.24 + s * 0.06, 0.15);
+  }
+  b.light(0, 0.35, 0.5, '#ffd28a', 2);
+}
+
+function tamanBermain(b, c, level, biome) {
+  const grass = biome === 'fantasi' ? '#b48ae8' : biome === 'gurun' ? '#d8bf8a' : '#7fc264';
+  b.box(0.92, 0.04, 0.92, grass, 0, 0, 0, {}, 'leaf');
+  b.box(0.46, 0.015, 0.3, '#e8d3a0', -0.18, 0.04, 0.22, {}, 'rough');
+  // swing frame and two swinging seats
+  for (const x of [-0.42, 0.06]) {
+    b.box(0.03, 0.5, 0.03, '#d8323a', x, 0.04, 0.14, { rx: 0.2 });
+    b.box(0.03, 0.5, 0.03, '#d8323a', x, 0.04, 0.32, { rx: -0.2 });
+  }
+  b.box(0.52, 0.03, 0.03, '#d8323a', -0.18, 0.52, 0.22);
+  for (const [x, ph] of [[-0.3, 0], [-0.06, 1]]) {
+    const sw = new THREE.Group();
+    sw.add(partMesh(new THREE.BoxGeometry(0.008, 0.36, 0.008).translate(0, -0.18, -0.04), '#5a5e68'));
+    sw.add(partMesh(new THREE.BoxGeometry(0.008, 0.36, 0.008).translate(0, -0.18, 0.04), '#5a5e68'));
+    sw.add(partMesh(new THREE.BoxGeometry(0.1, 0.02, 0.1).translate(0, -0.37, 0), '#ffd23d'));
+    sw.position.set(x, 0.52, 0.22);
+    sw.rotation.y = Math.PI / 2;
+    sw.userData.swing = 1 + ph;
+    b.part(sw);
+  }
+  // slide
+  b.box(0.16, 0.3, 0.16, '#3f6fb0', 0.28, 0.04, -0.28);
+  b.box(0.14, 0.02, 0.5, '#ffd23d', 0.28, 0.2, -0.02, { rx: 0.62 });
+  for (let k = 0; k < 4; k++) b.box(0.14, 0.015, 0.03, '#efe6d6', 0.28, 0.08 + k * 0.07, -0.38);
+  // seesaw
+  b.box(0.05, 0.07, 0.05, '#7a5236', -0.25, 0.04, -0.25);
+  const ss = new THREE.Group();
+  ss.add(partMesh(new THREE.BoxGeometry(0.5, 0.02, 0.06), '#7fb84e'));
+  ss.position.set(-0.25, 0.12, -0.25);
+  ss.userData.seesaw = 1;
+  b.part(ss);
+}
+
+function panggung(b, c, level) {
+  b.box(1.85, 0.04, 1.85, '#c9b48a', 0, 0, 0, {}, 'rough');
+  b.cyl(0.62, 0.66, 0.14, c.stone, 0, 0.04, -0.15, {}, 'rough', 12);
+  b.cyl(0.6, 0.6, 0.02, WOOD, 0, 0.18, -0.15, {}, 'solid', 12);
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + 0.26;
+    b.cyl(0.025, 0.025, 0.62, '#efe6d6', Math.cos(a) * 0.55, 0.18, -0.15 + Math.sin(a) * 0.55, {}, 'smooth', 6);
+  }
+  b.cone(0.74, 0.32, c.roof, 0, 0.8, -0.15, {}, 'rough', 12);
+  b.ball(0.05, '#e2b33c', 0, 1.12, -0.15, {}, 'smooth', 0);
+  // instruments: a drum kit and a piano
+  b.cyl(0.08, 0.08, 0.1, '#e94f4f', -0.2, 0.2, -0.32, {}, 'smooth', 10);
+  b.cyl(0.06, 0.06, 0.08, '#efe6d6', -0.05, 0.2, -0.38, {}, 'smooth', 10);
+  b.box(0.3, 0.16, 0.12, '#1f2230', 0.22, 0.2, -0.35);
+  b.box(0.28, 0.01, 0.05, '#f4f1ea', 0.22, 0.36, -0.3);
+  // string lights around the roof
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    b.glowBall(0.025, ['#ffd23d', '#ff8ad8', '#7fe08a', '#86b8e8'][k % 4], 6, Math.cos(a) * 0.66, 0.78, -0.15 + Math.sin(a) * 0.66);
+  }
+  // benches for the audience
+  for (const x of [-0.45, 0.45]) b.box(0.5, 0.06, 0.12, WOOD, x, 0.1, 0.72), b.box(0.04, 0.1, 0.1, WOOD_D, x - 0.2, 0.04, 0.72), b.box(0.04, 0.1, 0.1, WOOD_D, x + 0.2, 0.04, 0.72);
+  b.light(0, 0.6, -0.1, '#ffd8a8', 3);
+}
+
+function menaraAir(b, c, level) {
+  b.box(0.8, 0.04, 0.8, c.stone, 0, 0, 0, {}, 'rough');
+  const H = 1.2 + level * 0.15;
+  for (const [x, z] of [[-0.24, -0.24], [0.24, -0.24], [-0.24, 0.24], [0.24, 0.24]]) b.box(0.05, H, 0.05, '#6a6e78', x, 0.04, z, { rx: z > 0 ? -0.06 : 0.06, rz: x > 0 ? 0.06 : -0.06 });
+  for (const y of [0.4, 0.8]) {
+    b.box(0.5, 0.025, 0.025, '#5a5e68', 0, y, 0.22);
+    b.box(0.5, 0.025, 0.025, '#5a5e68', 0, y, -0.22);
+    b.box(0.025, 0.025, 0.5, '#5a5e68', 0.22, y, 0);
+    b.box(0.025, 0.025, 0.5, '#5a5e68', -0.22, y, 0);
+  }
+  b.cyl(0.34, 0.34, 0.4, c.wall === STYLE.desa.wall ? '#86b8e8' : c.wall, 0, H, 0, {}, 'solid', 12);
+  b.cyl(0.35, 0.35, 0.04, '#5a5e68', 0, H + 0.13, 0, {}, 'solid', 12);
+  b.cone(0.38, 0.22, c.roof, 0, H + 0.4, 0, {}, 'rough', 12);
+  for (let k = 0; k < 8; k++) b.box(0.08, 0.012, 0.02, '#c8cdd6', 0.3, 0.1 + k * 0.14, 0.27);
+  b.glowBox(0.04, 0.04, 0.04, '#ff4a4a', 7, 0, H + 0.6, 0, {}, '#a83a3a');
+}
+
 const BUILDERS = {
   balai, vila, apartemen, ladang, penebang, tambang, nelayan, bijih, pasir, kristal, kincir, gudang, bengkel, pasar, kedai, toko,
   sumur, taman, lampu, pohon: pohonHias, bunga, bangku, airmancur, monumen, lumbung, rumahpohon: rumahPohon, observatorium, obelisk,
   menarajam: menaraJam, pohonkehidupan: pohonKehidupan,
+  peternakan, kebun, penggergajian, tungku, kaca, klinik, sekolah, perpustakaan, taman_bermain: tamanBermain, panggung, menara_air: menaraAir,
 };
 
 /**

@@ -108,7 +108,9 @@ export class Environment {
     this.windDir = new THREE.Vector2(0.85, 0.53).normalize();
     this.center = new THREE.Vector3();
     this.k = { sun: new THREE.Color(), sky: new THREE.Color(), gnd: new THREE.Color(), top: new THREE.Color(), bot: new THREE.Color(), tint: new THREE.Color(), sunI: 0, amb: 0, exp: 1, stars: 0, night: 0 };
-    this.post = { skyTop: new THREE.Color(), skyBottom: new THREE.Color(), stars: 0, fog: 0, fogColor: new THREE.Color(), flash: 0, tint: new THREE.Color(1, 1, 1), exposure: 1, milky: 0, aurora: 0, moon: 0, moonPos: new THREE.Vector2(0.82, 0.8) };
+    this.post = { skyTop: new THREE.Color(), skyBottom: new THREE.Color(), stars: 0, fog: 0, fogColor: new THREE.Color(), flash: 0, tint: new THREE.Color(1, 1, 1), exposure: 1, milky: 0, aurora: 0, moon: 0, moonPos: new THREE.Vector2(0.82, 0.8), haze: 1, split: 1, tilt: 1, splitLo: new THREE.Color(1, 1, 1), splitHi: new THREE.Color(1, 1, 1) };
+    // winter: snow that stays on the ground even when it is not snowing (0..1, set by the game)
+    this.snowFloor = 0;
     // per-scene sky extras (set from the scene's `sky`), plus a live aurora switch scenes can flip
     this.sky = { milky: 0, aurora: 0, moon: 0.9, moonPos: [0.82, 0.8] };
     this.auroraOn = false;
@@ -200,7 +202,8 @@ export class Environment {
     const raining = W.rain > 0.15;
     this.wet += ((raining ? 1 : 0) - this.wet) * (1 - Math.exp(-dt * (raining ? 0.6 : 0.12)));
     if (W.snow > 0.2) this.snowCover = Math.min(1, this.snowCover + dt * 0.11 * W.snow);
-    else this.snowCover = Math.max(0, this.snowCover - dt * 0.05);
+    else if (this.snowCover > this.snowFloor) this.snowCover = Math.max(this.snowFloor, this.snowCover - dt * 0.05);
+    else this.snowCover = Math.min(this.snowFloor, this.snowCover + dt * 0.03);
 
     const k = sampleKeys(this.hour, this.k);
     this.night = k.night;
@@ -267,6 +270,20 @@ export class Environment {
     P.moon = (this.sky.moon ?? 0) * smooth(0.45, 0.85, k.night) * (1 - W.clouds * 0.95) * (1 - W.fog * 0.8);
     P.moonPos.fromArray(this.sky.moonPos || [0.82, 0.8]);
     shared.uSkyRefl.value.copy(P.skyBottom).lerp(P.skyTop, 0.35);
+    // split toning: highlights take the key light's hue, shadows the sky's (normalised to keep brightness)
+    const norm = (out, c, k) => {
+      const l = Math.max(0.05, 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+      out.setRGB(1 + (c.r / l - 1) * k, 1 + (c.g / l - 1) * k, 1 + (c.b / l - 1) * k);
+      out.r = Math.min(1.45, Math.max(0.65, out.r));
+      out.g = Math.min(1.45, Math.max(0.65, out.g));
+      out.b = Math.min(1.45, Math.max(0.65, out.b));
+      return out;
+    };
+    norm(P.splitHi, useSun ? k.sun : PAL.moon, useSun ? 0.5 : 0.25);
+    norm(P.splitLo, k.sky, 0.45);
+    P.split = 1 - 0.55 * W.clouds - 0.3 * W.fog;
+    P.tilt = 1;
+    P.haze = 1 + W.fog * 1.4 + W.rain * 0.4;
 
     // shared material uniforms
     shared.uTime.value = this.time;

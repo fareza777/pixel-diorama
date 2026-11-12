@@ -224,6 +224,51 @@ export const BUILDINGS = {
     name: 'Monument', cat: 'deco', size: 1, cost: { coins: 320, stone: 40, tool: 6 }, unlock: 10,
     desc: 'A statue the whole island is proud of.', happy: { amount: 15, radius: 5 },
   },
+  // ---- production chains and town services (v1.1)
+  peternakan: {
+    name: 'Chicken Coop', cat: 'prod', size: 1, cost: { coins: 90, wood: 20 }, unlock: 3, notBiomes: ['kota'],
+    desc: 'Hens lay eggs every day. Produces food, and the chickens roam around.', jobs: 1, produce: { food: 1.8 },
+  },
+  kebun: {
+    name: 'Orchard', cat: 'prod', size: 2, cost: { coins: 160, wood: 30, plank: 5 }, unlock: 4, notBiomes: ['kota', 'gurun'],
+    desc: 'Rows of fruit trees. Produces food and a little wood.', jobs: 2, produce: { food: 1.9, wood: 0.35 },
+  },
+  penggergajian: {
+    name: 'Sawmill', cat: 'prod', size: 1, cost: { coins: 180, wood: 30, stone: 20 }, unlock: 5, notBiomes: ['kota'],
+    desc: 'Turns 3 Wood into 1 Plank, all by itself. Needs wood in storage.', jobs: 2, consume: { wood: 2.4 }, produce: { plank: 0.8 },
+  },
+  tungku: {
+    name: 'Brick Kiln', cat: 'prod', size: 1, cost: { coins: 220, stone: 40, plank: 10 }, unlock: 6,
+    desc: 'Bakes 3 Stone into 1 Brick. Needs stone in storage.', jobs: 2, consume: { stone: 2.1 }, produce: { brick: 0.7 },
+  },
+  kaca: {
+    name: 'Glassworks', cat: 'prod', size: 1, cost: { coins: 300, brick: 20, plank: 15 }, unlock: 8,
+    desc: 'Melts 3 Sand into 1 Glass in a roaring furnace. Needs sand in storage.', jobs: 2, consume: { sand: 1.8 }, produce: { glass: 0.6 },
+  },
+  klinik: {
+    name: 'Clinic', cat: 'service', size: 1, cost: { coins: 260, brick: 15, glass: 6 }, unlock: 7,
+    desc: 'A doctor keeps the village healthy: colds clear up fast and nearby villagers feel safe.', jobs: 1, happy: { amount: 7, radius: 4 }, clinic: true,
+  },
+  sekolah: {
+    name: 'School', cat: 'service', size: 2, cost: { coins: 420, plank: 30, brick: 20 }, unlock: 8,
+    desc: 'Teachers share what they know. Earns XP every hour and makes villagers proud.', jobs: 2, produce: { xp: 2.5 }, happy: { amount: 6, radius: 4 },
+  },
+  perpustakaan: {
+    name: 'Library', cat: 'service', size: 1, cost: { coins: 340, plank: 25, glass: 8 }, unlock: 9,
+    desc: 'Quiet reading rooms. Bookworms adore it, and it earns a little XP.', jobs: 1, produce: { xp: 1.5 }, leisure: true, happy: { amount: 9, radius: 3 },
+  },
+  taman_bermain: {
+    name: 'Playground', cat: 'deco', size: 1, cost: { coins: 140, wood: 20, plank: 8 }, unlock: 5,
+    desc: 'Swings and a slide. Villagers love to play here in the evening.', happy: { amount: 9, radius: 3 }, leisure: true,
+  },
+  panggung: {
+    name: 'Bandstand', cat: 'deco', size: 2, cost: { coins: 480, plank: 30, brick: 15 }, unlock: 10,
+    desc: 'Live music every evening. Villagers gather to dance and clap along.', jobs: 1, produce: { coins: 2 }, happy: { amount: 14, radius: 5 }, leisure: true, stage: true,
+  },
+  menara_air: {
+    name: 'Water Tower', cat: 'service', size: 1, cost: { coins: 360, brick: 20, plank: 20 }, unlock: 11,
+    desc: 'Fresh water for the whole town: farms and orchards in range grow 20% faster.', happy: { amount: 5, radius: 5 }, boost: { type: ['ladang', 'kebun'], radius: 5, amount: 0.2 },
+  },
   // ---- landmarks, one per island, only in their biome
   lumbung: {
     name: 'Grand Barn', cat: 'special', size: 2, cost: { coins: 400, plank: 30, brick: 15 }, unlock: 5, biomes: ['desa'], limit: 1,
@@ -262,12 +307,48 @@ export const BUILD_CATS = [
   { id: 'special', name: 'Landmarks' },
 ];
 export const MAX_LEVEL = 3;
+// buildings villagers walk through (fields, parks, open squares)
+export const WALKABLE_TYPES = ['ladang', 'taman', 'pasar', 'kebun', 'taman_bermain'];
 export const upgradeCost = (def, level) => {
   const out = {};
   const k = level === 1 ? 1.2 : 2.2;
   for (const [r, v] of Object.entries(def.cost)) out[r] = Math.ceil(v * k);
   if (level >= 1 && !out.tool && (def.cat === 'prod' || def.cat === 'home')) out.tool = level;
   return out;
+};
+
+// ---------------------------------------------------------------- seasons
+// A year has four seasons of SEASON_DAYS days. They change the weather, what grows, how villagers
+// feel, the colour of the leaves (see NX_FOLIAGE in materials.js) and which events can happen.
+//   weather: multipliers on the island's weather table, add: weights added to it (snowable islands)
+//   prod: production multipliers, mood: added to villagers' target mood
+export const SEASON_DAYS = 5;
+export const SEASONS = [
+  {
+    id: 'spring', name: 'Spring', icon: 'flower', color: '#ff9ac8',
+    desc: 'Blossoms everywhere and gentle showers. Farms grow a little faster.',
+    weather: { rain: 1.3, clear: 1.1, snow: 0.3 }, prod: { food: 1.1 }, mood: 3,
+  },
+  {
+    id: 'summer', name: 'Summer', icon: 'sun', color: '#ffd23d',
+    desc: 'Long sunny days. Food and coins flow, but storms brew in the heat.',
+    weather: { clear: 1.6, rain: 0.6, storm: 1.4, snow: 0, fog: 0.6 }, prod: { food: 1.2, coin: 1.1 }, mood: 4,
+  },
+  {
+    id: 'autumn', name: 'Autumn', icon: 'leaf', color: '#e8823a',
+    desc: 'Golden leaves and the great harvest. Food +35%, misty mornings.',
+    weather: { rain: 1.3, fog: 1.8, cloudy: 1.3, snow: 0.4 }, prod: { food: 1.35, wood: 1.1 }, mood: 2,
+  },
+  {
+    id: 'winter', name: 'Winter', icon: 'snowflake', color: '#bfe0ff',
+    desc: 'Snow on the rooftops. Crops grow slowly (-25% food); stock up before it comes.',
+    weather: { snow: 3, clear: 0.7, rain: 0.4, storm: 0.3 }, add: { snow: 3 }, noSnow: ['pantai', 'gurun'], prod: { food: 0.75, crystal: 1.2 }, mood: -2,
+  },
+];
+// how strongly each island shows the seasons (leaf colours, snow that stays in winter)
+export const SEASON_LOOK = {
+  desa: { amt: 1, snow: 0.6 }, hutan: { amt: 1, snow: 0.65 }, pantai: { amt: 0.3, snow: 0 }, gunung: { amt: 0.8, snow: 0.85 },
+  gurun: { amt: 0.2, snow: 0 }, kota: { amt: 0.8, snow: 0.45 }, fantasi: { amt: 0.6, snow: 0.35 },
 };
 
 // ---------------------------------------------------------------- crafting
@@ -365,6 +446,15 @@ export const QUESTS = [
   { id: 'q20', title: 'City Lights', desc: 'Unlock Neon City.', goals: [{ type: 'island', id: 'kota' }], reward: { coins: 1800, xp: 700 }, after: 'q19' },
   { id: 'q21', title: 'Metropolis', desc: 'Reach 120 villagers in total.', goals: [{ type: 'pop', n: 120 }], reward: { coins: 2500, xp: 900 }, after: 'q20' },
   { id: 'q22', title: 'Wonderland', desc: 'Unlock the Fantasy Isle.', goals: [{ type: 'island', id: 'fantasi' }], reward: { coins: 3000, xp: 1200, crystal: 10 }, after: 'q21' },
+  { id: 'q24', title: 'Eggs for Breakfast', desc: 'Build a Chicken Coop.', goals: [{ type: 'build', id: 'peternakan', n: 1 }], reward: { coins: 100, xp: 60, food: 20 }, after: 'q4' },
+  { id: 'q25', title: 'The Sawmill', desc: 'Build a Sawmill so planks make themselves.', goals: [{ type: 'build', id: 'penggergajian', n: 1 }], reward: { coins: 200, xp: 110, wood: 30 }, after: 'q8' },
+  { id: 'q26', title: 'Fire and Clay', desc: 'Build a Brick Kiln.', goals: [{ type: 'build', id: 'tungku', n: 1 }], reward: { coins: 260, xp: 140, stone: 40 }, after: 'q25' },
+  { id: 'q27', title: 'A Good Education', desc: 'Build a School.', goals: [{ type: 'build', id: 'sekolah', n: 1 }], reward: { coins: 380, xp: 200, plank: 15 }, after: 'q26' },
+  { id: 'q28', title: 'Year Round', desc: 'Live through 4 seasons.', goals: [{ type: 'seasons', n: 4 }], reward: { coins: 600, xp: 300, tool: 3 }, after: 'q10' },
+  { id: 'q29', title: 'Clear Glass', desc: 'Build a Glassworks.', goals: [{ type: 'build', id: 'kaca', n: 1 }], reward: { coins: 420, xp: 220, sand: 40 }, after: 'q27' },
+  { id: 'q30', title: 'Music in the Air', desc: 'Build a Bandstand and reach 75% happiness.', goals: [{ type: 'build', id: 'panggung', n: 1 }, { type: 'happy', n: 75 }], reward: { coins: 700, xp: 360 }, after: 'q29' },
+  { id: 'q31', title: 'Healthy Town', desc: 'Build a Clinic and a Water Tower.', goals: [{ type: 'build', id: 'klinik', n: 1 }, { type: 'build', id: 'menara_air', n: 1 }], reward: { coins: 900, xp: 420, glass: 15 }, after: 'q30' },
+  { id: 'q32', title: 'Booming Industry', desc: 'Have 3 production-chain buildings (Sawmill, Kiln or Glassworks).', goals: [{ type: 'chain', n: 3 }], reward: { coins: 1200, xp: 520, tool: 5 }, after: 'q31' },
   { id: 'q23', title: 'Tree of Life', desc: 'Plant the Tree of Life on the Fantasy Isle.', goals: [{ type: 'build', id: 'pohonkehidupan', n: 1 }], reward: { coins: 6000, xp: 2500 }, after: 'q22' },
 ];
 
@@ -397,6 +487,9 @@ export const ACHIEVEMENTS = [
   { id: 'ach_days', name: 'Loyal', desc: 'Spend 30 days in this world.', stat: 'days', n: 30, reward: { coins: 700 } },
   { id: 'ach_streak', name: 'Regular Visitor', desc: 'Claim the Daily Reward 7 days in a row.', stat: 'streak', n: 7, reward: { coins: 700 } },
   { id: 'ach_level10', name: 'Senior Mayor', desc: 'Reach level 10.', stat: 'level', n: 10, reward: { coins: 800 } },
+  { id: 'ach_seasons', name: 'Four Seasons', desc: 'Live through 8 seasons.', stat: 'seasons', n: 8, reward: { coins: 900 } },
+  { id: 'ach_chain', name: 'Industrialist', desc: 'Produce 100 goods in Sawmills, Kilns and Glassworks.', stat: 'chained', n: 100, reward: { coins: 1200 } },
+  { id: 'ach_school', name: 'Scholar', desc: 'Earn 500 XP from Schools and Libraries.', stat: 'learned', n: 500, reward: { coins: 800 } },
   { id: 'ach_level20', name: 'Legend', desc: 'Reach level 20.', stat: 'level', n: 20, reward: { coins: 4000 } },
 ];
 
@@ -665,6 +758,57 @@ export const EVENTS = [
     flavor: 'Petals swirl on the wind and the whole island smells of honey.',
     effect: ['Happiness +10', 'Crystal and food production +50%'], fx: { weather: 'clear', mood: 10, mult: { crystal: 1.5, food: 1.5 } },
   },
+
+  // ---- v1.1: seasons and spectacle
+  {
+    id: 'springfair', name: 'Spring Fair', icon: 'flower', kind: 'good', hours: 5, weight: 3, minPop: 5, seasons: ['spring'], start: [9, 15], notWeather: ['storm'],
+    desc: 'Flower stalls and games in the square. Fun and taxes are up!',
+    flavor: 'Bunting goes up, the bakers bring out their best, and everyone wears a flower.',
+    effect: ['Happiness +8, leisure 50% more fun', 'Home taxes +30%'], fx: { mood: 8, fun: 1.5, tax: 1.3, gather: [10, 17], gatherFor: 4, pose: 'clap' },
+  },
+  {
+    id: 'harvestfest', name: 'Harvest Festival', icon: 'food', kind: 'good', hours: 6, weight: 3, minPop: 4, seasons: ['autumn'], needs: 'ladang', start: [9, 15],
+    desc: 'Pumpkins, pies and a big bonfire. Food x1.6 and a party at the plaza.',
+    flavor: 'The barns are full and the whole village celebrates the year\'s harvest together.',
+    effect: ['Food production x1.6', 'Villagers celebrate at the plaza in the evening'], fx: { mood: 8, mult: { food: 1.6 }, gather: [17, 21], pose: 'dance' },
+  },
+  {
+    id: 'snowfest', name: 'Snow Festival', icon: 'snowflake', kind: 'good', hours: 6, weight: 3, minPop: 4, seasons: ['winter'], notBiomes: ['pantai', 'gurun'], start: [9, 16],
+    desc: 'Snowball fights and hot cocoa! Happiness up, villagers gather to cheer.',
+    flavor: 'Fresh snow, bright scarves and the smell of roasting chestnuts.',
+    effect: ['Happiness +10', 'Diners earn +60% coins'], fx: { weather: 'snow', mood: 10, type: { kedai: 1.6 }, gather: [11, 16], gatherFor: 3, pose: 'cheer' },
+  },
+  {
+    id: 'drought', name: 'Dry Spell', icon: 'sun', kind: 'bad', hours: 8, weight: 2, seasons: ['summer'], notBiomes: ['kota', 'fantasi'], needs: 'ladang',
+    desc: 'No rain for days. Farms produce 40% less.',
+    flavor: 'The soil cracks and the wells run low. A Water Tower would help.',
+    effect: ['Food production -40%', 'Water Towers cancel the penalty in their range'], tip: 'Build a Water Tower near the fields.',
+    fx: { weather: 'clear', mult: { food: 0.6 }, hunger: 1.2, mood: -3 },
+  },
+  {
+    id: 'eclipse', name: 'Solar Eclipse', icon: 'moon', kind: 'good', hours: 2, weight: 1, minLevel: 6, start: [10, 14], notWeather: ['rain', 'storm', 'snow'],
+    desc: 'The moon covers the sun! Stars come out at noon and crystals glow.',
+    flavor: 'The birds fall silent, the lamps flicker on and everyone looks up in awe.',
+    effect: ['Crystal production x3', 'Happiness +6'], fx: { weather: 'clear', mood: 6, mult: { crystal: 3 }, eclipse: true },
+  },
+  {
+    id: 'migration', name: 'Bird Migration', icon: 'leaf', kind: 'good', hours: 4, weight: 2, notBiomes: ['kota'], seasons: ['spring', 'autumn'], start: [7, 16], notWeather: ['storm'],
+    desc: 'Great flocks pass over the island on their way south.',
+    flavor: 'The sky fills with wings and the sound of a thousand birds.',
+    effect: ['Happiness +6', 'Gathering gives +1 extra'], fx: { mood: 6, gatherBonus: 1 },
+  },
+  {
+    id: 'earthquake', name: 'Tremors', icon: 'stone', kind: 'bad', hours: 2, weight: 1, minLevel: 7, notBiomes: ['fantasi'],
+    desc: 'The ground shakes! Building is slower, but new ore and stone come to light.',
+    flavor: 'Cups rattle, chimneys sway and the old miners grin: the mountain is opening up.',
+    effect: ['Construction 50% slower', 'Stone and ore production x1.8'], fx: { mood: -5, build: 0.5, mult: { stone: 1.8, ore: 1.8 }, quake: true },
+  },
+  {
+    id: 'tourists', name: 'Tourist Season', icon: 'compass', kind: 'visit', hours: 6, weight: 2, minLevel: 5, minPop: 8, seasons: ['summer', 'spring'], start: [8, 14],
+    desc: 'Tourists flock to the island! Shops, diners and markets earn +70%.',
+    flavor: 'Cameras click, sun hats bob along the streets and the cash registers ring.',
+    effect: ['Shops, diners, markets and bandstands earn +70%', 'Sell prices +20%'], fx: { type: { toko: 1.7, kedai: 1.7, pasar: 1.7, panggung: 1.7 }, sell: 1.2, mood: 3 },
+  },
 ];
 export const EVENT_BY_ID = Object.fromEntries(EVENTS.map((e) => [e.id, e]));
 
@@ -700,4 +844,8 @@ export const TIPS = [
   'Sell goods at the Market when the Merchant Caravan visits for big profits.',
   'Production keeps going while the game is closed, for up to 8 hours.',
   'Tap a building to upgrade, repaint, rotate or demolish it.',
+  'Sawmills, Brick Kilns and Glassworks turn raw goods into crafted ones on their own.',
+  'Seasons change every 5 days. Stock up on food before winter!',
+  'Water Towers make farms and orchards in range grow faster.',
+  'Some events only happen in certain seasons.',
 ];

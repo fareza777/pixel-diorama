@@ -27,6 +27,9 @@ export const shared = {
   // the mirror pass cuts everything under the water line with these (a uniform, so no shader switching)
   uClipOn: { value: 0 },
   uClipY: { value: 0 },
+  // seasons (spring, summer, autumn, winter weights, summing to 1) and how strongly the island shows them
+  uSeason: { value: new THREE.Vector4(0, 1, 0, 0) },
+  uSeasonAmt: { value: 1 },
 };
 
 function gradient(values) {
@@ -156,6 +159,9 @@ uniform float uGlow;
 uniform float uClipOn;
 uniform float uClipY;
 uniform sampler2D uFbmTex;
+uniform vec4 uSeason;
+uniform float uSeasonAmt;
+uniform float uFoliage;
 varying vec3 vNxWorld;
 varying vec3 vNxWorldNormal;
 layout(location = 1) out highp vec4 gNormal;
@@ -206,6 +212,26 @@ if (uClipOn > 0.5 && vNxWorld.y < uClipY) discard;
   float nxA = texture2D(uFbmTex, nxP).r;
   float nxB = texture2D(uFbmTex, nxP * 2.9 + 0.37).r;
   diffuseColor.rgb *= 1.0 + ((nxA * 0.6 + nxB * 0.4) - 0.5) * 1.35 * uNoiseAmt * uTexture;
+#ifdef NX_FOLIAGE
+  {
+    // seasonal foliage: only green surfaces change (leaves, crops, grass, meadows)
+    vec3 fc = diffuseColor.rgb;
+    float nxGreen = clamp((fc.g - max(fc.r, fc.b)) * 5.0, 0.0, 1.0);
+    float nxAmt = nxGreen * uFoliage * uSeasonAmt * (1.0 - uSeason.y);
+    if (nxAmt > 0.001) {
+      float nxL = dot(fc, vec3(0.299, 0.587, 0.114));
+      vec3 nxSpring = fc * vec3(0.98, 1.14, 0.9);
+      nxSpring = mix(nxSpring, vec3(1.0, 0.66, 0.8) * (nxL * 2.2 + 0.18), step(0.74, nxB) * 0.9);
+      vec3 nxAu = mix(vec3(0.95, 0.4, 0.08), vec3(0.78, 0.14, 0.06), smoothstep(0.38, 0.62, nxA));
+      nxAu = mix(nxAu, vec3(0.98, 0.7, 0.14), smoothstep(0.58, 0.8, nxB));
+      vec3 nxAutumn = nxAu * (nxL * 2.2 + 0.06);
+      vec3 nxWinter = mix(vec3(nxL), fc, 0.3) * vec3(0.9, 0.95, 1.06);
+      float nxW = max(1e-4, uSeason.x + uSeason.z + uSeason.w);
+      vec3 nxS = (nxSpring * uSeason.x + nxAutumn * uSeason.z + nxWinter * uSeason.w) / nxW;
+      diffuseColor.rgb = mix(fc, nxS, nxAmt);
+    }
+  }
+#endif
 #ifdef NX_WATER
   float nxD = clamp(vNxDepth / uDeepAt, 0.0, 1.0);
   vec3 nxW = mix(uShallow, uDeep, smoothstep(0.0, 1.0, nxD));
@@ -358,6 +384,7 @@ export function toon(color = '#ffffff', o = {}) {
       uWetAffect: { value: o.wet ?? 1 },
       uWindAmt: { value: o.wind ?? 0 },
       uGlow: { value: o.glow ?? 1 },
+      uFoliage: { value: o.foliage ?? 0 },
       uShallow: { value: col(o.shallow, '#58c7c4') },
       uDeep: { value: col(o.deep, '#1f548f') },
       uFoam: { value: col(o.foam, '#e9f7ff') },
@@ -384,8 +411,9 @@ export function toon(color = '#ffffff', o = {}) {
     m.userData.mirror = true;
   }
   if (o.windows) m.defines.NX_WINDOWS = '';
+  if (o.foliage) m.defines.NX_FOLIAGE = '';
   m.onBeforeCompile = nxPatch;
-  m.customProgramCacheKey = () => 'nx-toon-3';
+  m.customProgramCacheKey = () => 'nx-toon-4';
   return m;
 }
 

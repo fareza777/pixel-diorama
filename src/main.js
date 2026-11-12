@@ -48,7 +48,10 @@ class App {
     this.env = new Environment();
     this.env.cycle = false;
     this.audio = new Ambience();
-    this.env.onThunder = (delay, power) => this.audio.thunder(delay, power);
+    this.env.onThunder = (delay, power) => {
+      this.audio.thunder(delay, power);
+      setTimeout(() => this.engine.shake(0.05 + power * 0.07), delay * 1000);
+    };
     this.game = new Game();
     this.world = new World(engine, this.env, this.audio, this.game);
     this.interior = new Interior(this);
@@ -75,6 +78,7 @@ class App {
     this._wire();
     const S = this.game.s.settings;
     platform.setHaptics(S.haptics);
+    this.engine.shakeScale = S.shake === false ? 0 : 1;
     this.audio.setVolume(S.volume);
     this.audio.setSfxVolume(S.sfx);
     this.perf.mode = S.quality;
@@ -125,7 +129,11 @@ class App {
     look.bloom = T.bloom;
     look.outline = T.outline;
     look.highlight = (this.perf?.extraPixel || 0) >= 1 ? 0 : 0.3;
-    this.world.setQuality({ grass: T.grass, mirror: T.mirror, lights: T.lights, smoke: T.smoke });
+    // the miniature focus follows the player's setting on top of the tier
+    look.tilt = this.game.s?.settings.tilt === false ? 0 : T.tilt;
+    look.haze = T.haze;
+    look.split = T.split;
+    this.world.setQuality({ grass: T.grass, mirror: T.mirror, lights: T.lights, smoke: T.smoke, ambient: T.ambient });
     if (!initial) this.fit();
   }
 
@@ -233,6 +241,13 @@ class App {
     g.on('newday', (d) => {
       ui.toast(`Day ${d} begins`, { icon: 'sun' });
       this.save();
+    });
+    g.on('season', (S) => {
+      this.audio.play('chord', { notes: [60, 64, 67, 71, 74], dur: 3, gain: 0.05 });
+      this.audio.play('sparkle');
+      const eff = Object.entries(S.prod || {}).map(([k, v]) => `<span class="pill ${v >= 1 ? 'on' : ''}">${k === 'coin' ? 'Coins' : RES[k]?.name || k} ${v >= 1 ? '+' : ''}${Math.round((v - 1) * 100)}%</span>`).join('');
+      ui.queueModal(() => ui.modal(`<div class="burst"></div>${ui.iconHTML(S.icon, 'xl')}<h2>${escH(S.name)} has come</h2><p>${escH(S.desc)}</p><div class="names">${eff}</div><button class="btn primary big" data-act="modal-ok">Lovely</button>`, { cls: 'celebrate' }));
+      this.saveSoon();
     });
     g.on('island:switch', ({ id, summary }) => {
       this.world.load();
@@ -400,6 +415,13 @@ class App {
       case 'haptics':
         platform.setHaptics(S.haptics);
         break;
+      case 'shake':
+        this.engine.shakeScale = S.shake === false ? 0 : 1;
+        if (S.shake !== false) this.engine.shake(0.08);
+        break;
+      case 'tilt':
+        this.applyQuality(this.perf.tier, this.perf.extraPixel);
+        break;
       case 'fps':
         document.getElementById('fps').classList.toggle('hidden', !S.fps);
         break;
@@ -549,6 +571,7 @@ class App {
     if (this.world.scene) this.env.center.set(0, 0, 0);
     this.env.update(dt);
     if (this.interior.active) this.interior.applyEnv(this.env, shared);
+    this.world.suspendSeason = this.interior.active;
     if (this._terrainDirty) {
       this._terrainDirty = false;
       this.world.refreshTerrain();

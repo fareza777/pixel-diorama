@@ -33,12 +33,31 @@ uniform vec2 uSize;
 void main() {
   vec2 uv = gl_FragCoord.xy / uSize;
   vec2 px = uDir / uSize;
-  vec3 c = texture(tSrc, uv).rgb * 0.2270270270;
-  c += texture(tSrc, uv + px * 1.3846153846).rgb * 0.3162162162;
-  c += texture(tSrc, uv - px * 1.3846153846).rgb * 0.3162162162;
-  c += texture(tSrc, uv + px * 3.2307692308).rgb * 0.0702702703;
-  c += texture(tSrc, uv - px * 3.2307692308).rgb * 0.0702702703;
-  gl_FragColor = vec4(c, 1.0);
+  vec4 c = texture(tSrc, uv) * 0.2270270270;
+  c += texture(tSrc, uv + px * 1.3846153846) * 0.3162162162;
+  c += texture(tSrc, uv - px * 1.3846153846) * 0.3162162162;
+  c += texture(tSrc, uv + px * 3.2307692308) * 0.0702702703;
+  c += texture(tSrc, uv - px * 3.2307692308) * 0.0702702703;
+  gl_FragColor = c;
+}
+`;
+
+// Half-res copy of the scene for the miniature (tilt-shift) focus: colour premultiplied by
+// coverage, so the blur never smears the black of empty sky into the edges of the island.
+export const TILT_DOWN_FRAG = /* glsl */`
+uniform sampler2D tColor;
+uniform sampler2D tDepth;
+uniform vec2 uSrc;
+void main() {
+  ivec2 m = ivec2(uSrc) - 1;
+  ivec2 p = ivec2(gl_FragCoord.xy) * 2;
+  vec4 s = vec4(0.0);
+  for (int k = 0; k < 4; k++) {
+    ivec2 q = min(p + ivec2(k & 1, k >> 1), m);
+    float a = texelFetch(tDepth, q, 0).r < 0.99999 ? 1.0 : 0.0;
+    s += vec4(texelFetch(tColor, q, 0).rgb * a, a);
+  }
+  gl_FragColor = s * 0.25;
 }
 `;
 
@@ -84,6 +103,16 @@ uniform float uMilky;
 uniform float uAurora;
 uniform float uMoon;
 uniform vec2 uMoonPos;
+uniform sampler2D tTilt;
+uniform float uTilt;
+uniform float uTiltFocus;
+uniform float uTiltBand;
+uniform float uHaze;
+uniform vec3 uHazeColor;
+uniform float uDepthMid;
+uniform float uSplit;
+uniform vec3 uSplitLo;
+uniform vec3 uSplitHi;
 
 float h2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 float n2(vec2 p) {
@@ -211,6 +240,19 @@ void main() {
       vec4 n = normalAt(p);
       if (n.a > 0.5) c *= 1.0 + uHighlight * normalEdge(p, nd, d, n.xyz);
     }
+    // aerial perspective: things farther back fade a little into the air
+    if (uHaze > 0.0) {
+      float dz = (d - uDepthMid) * uDepthRange;
+      c = mix(c, uHazeColor, uHaze * smoothstep(-3.0, 16.0, dz));
+    }
+    // miniature focus: the top and bottom of the view drift softly out of focus
+    if (uTilt > 0.0) {
+      float tw = smoothstep(uTiltBand, uTiltBand + 0.32, abs(uv.y - uTiltFocus)) * uTilt;
+      if (tw > 0.002) {
+        vec4 tb = texture(tTilt, uv);
+        c = mix(c, tb.rgb / max(tb.a, 1e-3), tw * smoothstep(0.35, 0.95, tb.a));
+      }
+    }
   }
   c += uBloom * (texture(tBloomA, uv).rgb + texture(tBloomB, uv).rgb * 0.85);
   c = mix(c, uFogColor, uFog * (bg ? 0.85 : (0.16 + 0.62 * uv.y)));
@@ -220,6 +262,12 @@ void main() {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSaturation);
   c = (c - 0.5) * uContrast + 0.5;
+  // split toning: cool shadows, sun-warmed highlights (the tints follow the time of day)
+  if (uSplit > 0.0) {
+    float sl = clamp(dot(c, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    c = mix(c, c * uSplitLo, (1.0 - smoothstep(0.05, 0.5, sl)) * uSplit);
+    c = mix(c, c * uSplitHi, smoothstep(0.45, 0.95, sl) * uSplit);
+  }
   vec2 q = uv - 0.5;
   q.x *= uRes.x / uRes.y;
   c *= 1.0 - uVignette * smoothstep(0.45, 1.05, length(q));

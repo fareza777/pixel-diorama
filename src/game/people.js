@@ -36,6 +36,12 @@ const TOOL_GEO = {
   axe: () => mergeGeometries([boxAt(0.075, 0.085, 0.02, -0.05, -0.4, 0), boxAt(0.03, 0.045, 0.034, 0.01, -0.4, 0)]),
   pick: () => mergeGeometries([boxAt(0.2, 0.03, 0.028, -0.03, -0.425, 0), boxAt(0.034, 0.034, 0.028, -0.13, -0.443, 0)]),
   shovel: () => mergeGeometries([boxAt(0.014, 0.1, 0.078, -0.006, -0.475, 0), boxAt(0.03, 0.02, 0.03, 0, -0.43, 0)]),
+  // villager work tools (share the handle)
+  hammer: () => mergeGeometries([boxAt(0.05, 0.05, 0.085, -0.01, -0.43, 0)]),
+  hoe: () => mergeGeometries([boxAt(0.1, 0.018, 0.05, -0.045, -0.435, 0), boxAt(0.02, 0.03, 0.02, 0, -0.425, 0)]),
+  broom: () => mergeGeometries([boxAt(0.03, 0.03, 0.03, 0, -0.43, 0), boxAt(0.035, 0.09, 0.11, 0, -0.49, 0)]),
+  // the fishing rod is one long piece of its own (no handle)
+  rod: () => mergeGeometries([boxAt(0.02, 0.24, 0.02, 0, -0.26, 0), boxAt(0.012, 0.6, 0.012, 0, -0.68, 0), boxAt(0.04, 0.035, 0.03, 0.02, -0.24, 0)]),
 };
 
 /**
@@ -47,6 +53,13 @@ export const GATHER_ANIMS = {
   mine: { T: 1.1, hit: 0.6, tool: 'pick' }, // overhead swing down onto rock
   dig: { T: 1.05, hit: 0.28, toss: 0.66, tool: 'shovel' }, // spade in, lever, toss
   pick: { T: 0.8, hit: 0.5, tool: null }, // picking berries by hand
+  // villagers at work (looped from the figure's phase, see Crowd.pose)
+  hoe: { T: 1.25, hit: 0.56, tool: 'hoe' }, // tilling a field
+  hammer: { T: 0.62, hit: 0.55, tool: 'hammer' }, // building sites, the workshop
+  sweep: { T: 1.4, hit: 0.5, tool: 'broom' }, // shops, the plaza
+  fish: { T: 4.2, hit: 0.26, tool: 'rod' }, // cast, then wait for a bite
+  vend: { T: 2.2, hit: 0.5, tool: null }, // market stalls: presenting goods
+  saw: { T: 0.9, hit: 0.5, tool: null }, // sawmill: pushing logs through
 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -129,6 +142,74 @@ function gatherPose(anim, u, P) {
       P.crouch = 0.01 + 0.006 * Math.abs(Math.sin(u * Math.PI * 4));
       break;
     }
+    case 'hoe': {
+      // lift the hoe high, chop it into the soil, drag it back
+      let a, lean;
+      if (u < 0.42) {
+        const x = ease(u / 0.42);
+        a = lerp(1.0, 2.55, x); lean = lerp(0.12, -0.04, x);
+      } else if (u < 0.56) {
+        const x = easeIn((u - 0.42) / 0.14);
+        a = lerp(2.55, 0.62, x); lean = lerp(-0.04, 0.3, x);
+      } else {
+        const x = ease((u - 0.56) / 0.44);
+        a = lerp(0.62, 1.0, x); lean = lerp(0.3, 0.12, x);
+      }
+      P.aR = P.aL = a; P.yR = 0.1; P.yL = -0.05; P.lean = lean; P.twist = 0.06 * Math.sin(u * Math.PI * 2); P.stance = 0.28;
+      break;
+    }
+    case 'hammer': {
+      // one-handed: the left hand steadies the work, the right hammers
+      let a;
+      if (u < 0.45) a = lerp(1.0, 2.3, ease(u / 0.45));
+      else if (u < 0.55) a = lerp(2.3, 0.85, easeIn((u - 0.45) / 0.1));
+      else a = lerp(0.85, 1.0, ease((u - 0.55) / 0.45));
+      P.aR = a; P.yR = -0.1; P.aL = 0.95; P.yL = 0.35;
+      P.lean = 0.2 + (u > 0.45 && u < 0.6 ? 0.06 : 0); P.twist = 0.08 * Math.sin(u * Math.PI * 2); P.stance = 0.22;
+      P.crouch = 0.02;
+      break;
+    }
+    case 'sweep': {
+      const s = Math.sin(u * Math.PI * 2);
+      P.aR = 0.75 + 0.08 * s; P.aL = 1.05 + 0.08 * s;
+      P.yR = 0.45 * s; P.yL = 0.45 * s + 0.2;
+      P.lean = 0.22; P.twist = 0.32 * s; P.stance = 0.18;
+      break;
+    }
+    case 'fish': {
+      // wind up over the shoulder, cast, then hold still with small twitches
+      let a, lean;
+      if (u < 0.16) {
+        const x = ease(u / 0.16);
+        a = lerp(1.2, 2.75, x); lean = lerp(0.05, -0.1, x);
+      } else if (u < 0.26) {
+        const x = easeOut((u - 0.16) / 0.1);
+        a = lerp(2.75, 1.05, x); lean = lerp(-0.1, 0.12, x);
+      } else {
+        const x = (u - 0.26) / 0.74;
+        a = 1.12 + 0.05 * Math.sin(x * 40) * Math.exp(-x * 3) + (x > 0.85 ? (x - 0.85) * 0.6 : 0);
+        lean = 0.08;
+      }
+      P.aR = a; P.yR = -0.05; P.aL = Math.max(0.85, a - 0.15); P.yL = -0.25;
+      P.lean = lean; P.twist = 0; P.stance = 0.18;
+      break;
+    }
+    case 'vend': {
+      // presenting goods: an open hand to the customer, a turn, a shrug
+      const s = Math.sin(u * Math.PI * 2), c = Math.cos(u * Math.PI * 2);
+      P.aR = 1.0 + 0.5 * Math.max(0, s); P.yR = -0.5 + 0.3 * c;
+      P.aL = 0.5 + 0.35 * Math.max(0, -s); P.yL = 0.3;
+      P.lean = 0.06; P.twist = 0.22 * s; P.stance = 0;
+      break;
+    }
+    case 'saw': {
+      // both hands push and pull a log along the bench
+      const s = Math.sin(u * Math.PI * 2);
+      P.aR = P.aL = 1.25 + 0.12 * s; P.yR = P.yL = 0;
+      P.lean = 0.18 + 0.1 * s; P.twist = 0; P.stance = 0.25;
+      P.crouch = 0.01;
+      break;
+    }
   }
   return P;
 }
@@ -161,10 +242,18 @@ const PARTS = {
   axe: { geo: TOOL_GEO.axe, per: 1, cast: false },
   pick: { geo: TOOL_GEO.pick, per: 1, cast: false },
   shovel: { geo: TOOL_GEO.shovel, per: 1, cast: false },
+  hammer: { geo: TOOL_GEO.hammer, per: 1, cast: false },
+  hoe: { geo: TOOL_GEO.hoe, per: 1, cast: false },
+  broom: { geo: TOOL_GEO.broom, per: 1, cast: false },
+  rod: { geo: TOOL_GEO.rod, per: 1, cast: false },
+  // a crate carried in both arms (porters, shop staff on their way in)
+  crate: { geo: () => boxAt(0.15, 0.12, 0.17, 0, 0, 0), per: 1, cast: true },
 };
-const TOOL_HEADS = ['axe', 'pick', 'shovel'];
+const TOOL_HEADS = ['axe', 'pick', 'shovel', 'hammer', 'hoe', 'broom', 'rod'];
+// tools that are one piece and hide the shared handle
+const NO_HANDLE = new Set(['rod']);
 
-const _m = new THREE.Matrix4(), _base = new THREE.Matrix4(), _upper = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
+const _m = new THREE.Matrix4(), _base = new THREE.Matrix4(), _upper = new THREE.Matrix4(), _head = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
 const _pose = { aR: 0, aL: 0, yR: 0, yL: 0, lean: 0, twist: 0, stance: 0, crouch: 0 };
 // lying down: tip the figure onto its back (its up axis turns to face backwards)
 const _qLie = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
@@ -221,7 +310,8 @@ export class Crowd {
     M.hat.setColorAt(slot, c.set(look.hat || look.hair));
     M.umbrella.setColorAt(slot, c.set(look.umbrella || '#e94f4f'));
     M.handle.setColorAt(slot, c.set(look.tool || '#8a5a38'));
-    for (const h of TOOL_HEADS) M[h].setColorAt(slot, c.set(look.toolHead || '#b9bec8'));
+    for (const h of TOOL_HEADS) M[h].setColorAt(slot, c.set(h === 'rod' ? look.tool || '#8a5a38' : h === 'broom' ? '#c9a86a' : look.toolHead || '#b9bec8'));
+    M.crate.setColorAt(slot, c.set('#b08454'));
     for (const m of Object.values(M)) m.instanceColor.needsUpdate = true;
   }
 
@@ -229,6 +319,7 @@ export class Crowd {
   setToolColor(slot, color) {
     const c = new THREE.Color(color);
     for (const h of TOOL_HEADS) {
+      if (h === 'rod' || h === 'broom') continue;
       this.meshes[h].setColorAt(slot, c);
       this.meshes[h].instanceColor.needsUpdate = true;
     }
@@ -240,11 +331,17 @@ export class Crowd {
   }
 
   /**
-   * Pose one figure. f: { pos, yaw, scale, anim, phase, umbrella, hat, long, tool }
-   * anim: 'walk' | 'idle' | 'work' | 'wave' | 'dance' | 'sit' | 'talk', or a gathering animation
-   * from GATHER_ANIMS ('chop' | 'mine' | 'dig' | 'pick') driven by f.u (0..1 through the loop) and
-   * f.blend (0 = standing, 1 = full pose) so it eases in and out instead of snapping.
-   * Arm angles are pitch around the shoulder: 0 hangs down, PI/2 points forward, PI points up.
+   * Pose one figure. f: { pos, yaw, scale, anim, phase, umbrella, hat, long, tool, u, blend }
+   * anim:
+   *   moving   'walk' | 'run' | 'carry' (walking with a crate)
+   *   standing 'idle' | 'lookAround' | 'stretch' | 'shiver' | 'point' | 'laugh' | 'clap' | 'cheer'
+   *            'work' | 'wave' | 'dance' | 'talk' | 'cook'
+   *   seated   'sit' | 'sitEat' | 'sitRead' | 'sitTalk', lying 'sleep'
+   *   looped actions from GATHER_ANIMS ('chop' | 'mine' | 'dig' | 'pick' | 'hoe' | 'hammer' | 'sweep'
+   *   | 'fish' | 'vend' | 'saw'), driven by f.u (0..1 through the loop, or the phase) and f.blend
+   *   (0 = standing, 1 = full pose) so they ease in and out instead of snapping.
+   * f.tool: true = the action's own tool. Arm angles are pitch around the shoulder: 0 hangs down,
+   * PI/2 points forward, PI points up. The head has its own yaw (look) and nod.
    */
   pose(slot, f) {
     const M = this.meshes;
@@ -254,6 +351,7 @@ export class Crowd {
     let bob = 0, lean = 0, twist = 0;
     const ph = f.phase || 0;
     let legSw = 0, armL = 0, armR = 0, yawL = 0, yawR = 0, sit = false;
+    let hy = 0, hn = 0, carry = false;
     let tool = null;
     const G = GATHER_ANIMS[f.anim];
     if (G) {
@@ -266,12 +364,35 @@ export class Crowd {
       bob = -0.23 * (1 - Math.cos(legSw)) - P.crouch * w;
       if (f.tool && w > 0.05) tool = G.tool;
       P.crouch = 0;
+      // eyes on the work
+      hn = (f.anim === 'vend' ? -0.05 : 0.14) * w;
+      if (f.anim === 'vend') hy = Math.sin(ph * 0.5) * 0.3;
     } else switch (f.anim) {
       case 'walk':
         legSw = Math.sin(ph) * 0.6;
         armL = -legSw * 0.8;
         armR = legSw * 0.8;
         bob = Math.abs(Math.sin(ph)) * 0.02;
+        lean = 0.03;
+        hn = 0.04 + Math.sin(ph * 2) * 0.015;
+        break;
+      case 'run':
+        legSw = Math.sin(ph) * 0.95;
+        armL = 0.45 - legSw * 1.1;
+        armR = 0.45 + legSw * 1.1;
+        lean = 0.2;
+        bob = Math.abs(Math.sin(ph)) * 0.05;
+        hn = -0.06;
+        twist = Math.sin(ph) * 0.08;
+        break;
+      case 'carry':
+        legSw = Math.sin(ph) * 0.5;
+        armL = armR = 1.32 + Math.abs(Math.sin(ph)) * 0.04;
+        yawR = -0.12;
+        yawL = 0.12;
+        lean = -0.05;
+        bob = Math.abs(Math.sin(ph)) * 0.015;
+        carry = true;
         break;
       case 'work':
         // hammering / tending in front of the body
@@ -279,11 +400,14 @@ export class Crowd {
         armL = 0.7 + Math.sin(ph * 1.6 + 1) * 0.3;
         lean = 0.14;
         bob = -Math.abs(Math.sin(ph * 1.6)) * 0.008;
+        hn = 0.15;
         break;
       case 'wave':
         armR = 2.7 + Math.sin(ph * 3) * 0.3;
         yawR = 0.35;
         armL = 0.08;
+        hy = 0.1;
+        hn = -0.1 + Math.sin(ph * 3) * 0.03;
         break;
       case 'dance':
         legSw = Math.sin(ph * 2) * 0.3;
@@ -291,11 +415,81 @@ export class Crowd {
         armR = 2.5 - Math.sin(ph * 2) * 0.45;
         twist = Math.sin(ph * 2) * 0.25;
         bob = Math.abs(Math.sin(ph * 2)) * 0.06;
+        hn = Math.sin(ph * 4) * 0.12;
+        hy = Math.sin(ph * 2) * 0.2;
         break;
+      case 'cheer': {
+        // little jumps with both arms up
+        const j = Math.abs(Math.sin(ph * 2.6));
+        bob = j * 0.11;
+        armR = armL = 2.85 + Math.sin(ph * 5.2) * 0.15;
+        yawR = 0.1;
+        yawL = -0.1;
+        hn = -0.18;
+        break;
+      }
+      case 'clap': {
+        const s = Math.max(0, Math.sin(ph * 7));
+        armR = armL = 1.3;
+        yawR = -(0.15 + 0.45 * s);
+        yawL = 0.15 + 0.45 * s;
+        bob = Math.abs(Math.sin(ph * 3.5)) * 0.012;
+        hn = -0.05;
+        hy = Math.sin(ph * 0.6) * 0.25;
+        break;
+      }
       case 'talk':
         armR = 0.55 + Math.sin(ph * 2.5) * 0.3;
         yawR = -0.2;
         armL = 0.08;
+        hn = Math.sin(ph * 3) * 0.06;
+        hy = Math.sin(ph * 0.7) * 0.18;
+        break;
+      case 'laugh': {
+        const s = Math.sin(ph * 9);
+        armR = armL = 0.6;
+        yawR = -0.62;
+        yawL = 0.62;
+        lean = -0.08 + Math.abs(s) * 0.03;
+        hn = -0.2 + s * 0.06;
+        bob = Math.abs(s) * 0.01;
+        break;
+      }
+      case 'point':
+        armR = 1.55;
+        yawR = -0.1;
+        armL = 0.1;
+        lean = 0.05;
+        hn = 0.04;
+        hy = Math.sin(ph * 0.5) * 0.08;
+        break;
+      case 'lookAround':
+        hy = Math.sin(ph * 0.9) * 0.95;
+        hn = -0.04 + Math.sin(ph * 1.3) * 0.05;
+        armL = 0.06;
+        armR = 0.06;
+        twist = Math.sin(ph * 0.9) * 0.12;
+        break;
+      case 'stretch': {
+        // arms up, lean back, a yawn
+        const s = 0.5 - 0.5 * Math.cos(ph * 0.9);
+        armR = armL = 0.25 + s * 2.8;
+        yawR = 0.15 * s;
+        yawL = -0.15 * s;
+        lean = -0.13 * s;
+        hn = -0.28 * s;
+        bob = 0.012 * s;
+        break;
+      }
+      case 'shiver':
+        // arms wrapped round the body, teeth chattering
+        armR = armL = 1.05;
+        yawR = -0.78;
+        yawL = 0.78;
+        twist = Math.sin(ph * 28) * 0.04;
+        bob = Math.sin(ph * 31) * 0.003;
+        lean = 0.08;
+        hn = 0.14;
         break;
       case 'sit':
       case 'sitEat':
@@ -309,18 +503,24 @@ export class Crowd {
           yawR = -0.35 * s;
           armL = 0.75;
           lean = 0.1 - s * 0.05;
+          hn = 0.12 - s * 0.1;
         } else if (f.anim === 'sitRead') {
           armR = armL = 1.05 + Math.sin(ph * 0.3) * 0.04;
           yawR = -0.25;
           yawL = 0.25;
           lean = 0.12;
+          hn = 0.32;
+          hy = Math.sin(ph * 0.35) * 0.08;
         } else if (f.anim === 'sitTalk') {
           armR = 0.55 + Math.max(0, Math.sin(ph * 2.2)) * 0.5;
           armL = 0.45;
           twist = Math.sin(ph * 0.7) * 0.12;
+          hy = Math.sin(ph * 0.7) * 0.3;
+          hn = Math.sin(ph * 3) * 0.05;
         } else {
           armR = armL = 0.5;
           lean = 0.04 + Math.sin(ph * 0.6) * 0.02;
+          hy = Math.sin(ph * 0.17 + slot) * 0.4;
         }
         break;
       case 'cook':
@@ -330,15 +530,21 @@ export class Crowd {
         armL = 0.9;
         yawL = 0.2;
         lean = 0.1;
+        hn = 0.25;
         break;
       case 'sleep':
         // lying on the back, slow breathing; feet at pos, head towards -facing
         armR = armL = 0.04;
         bob = 0.09 + Math.sin(ph * 0.9) * 0.004;
+        hy = 0.25;
         break;
       default:
+        // idle: breathing, a weight shift and the odd glance around
         armL = Math.sin(ph * 0.5) * 0.04;
         armR = -armL;
+        bob = Math.sin(ph * 0.9) * 0.003;
+        hy = Math.sin(ph * 0.21 + slot * 1.7) * 0.4 * Math.max(0, Math.sin(ph * 0.07 + slot));
+        twist = Math.sin(ph * 0.13 + slot) * 0.04;
     }
     if (f.anim === 'sleep') _q.multiply(_qLie);
     _base.compose(_v.set(f.pos.x, f.pos.y + bob * sc - (sit ? 0.06 * sc : 0), f.pos.z), _q, _s.set(sc, sc, sc));
@@ -362,13 +568,18 @@ export class Crowd {
     }
     const ly = 0.34, lx = lean * 0.12, U = _upper;
     set(M.body, slot, lx * 0.5, ly, 0, -lean, 0, U);
-    set(M.head, slot, lx, 0.515, 0, -lean, 0, U);
-    set(M.hair, slot, lx - 0.01, 0.575, 0, -lean, 0, U);
-    if (f.long) set(M.hairBack, slot, lx - 0.05, 0.5, 0, -lean, 0, U);
+    // the head turns and nods in its own frame; hair and hat ride along
+    _e.set(0, hy, -lean - hn);
+    _q.setFromEuler(_e);
+    _l.compose(_v.set(lx, 0.515, 0), _q, _s.set(1, 1, 1));
+    _head.multiplyMatrices(U, _l);
+    set(M.head, slot, 0, 0, 0, 0, 0, _head);
+    set(M.hair, slot, -0.01, 0.06, 0, 0, 0, _head);
+    if (f.long) set(M.hairBack, slot, -0.05, -0.015, 0, 0, 0, _head);
     else M.hairBack.setMatrixAt(slot, ZERO);
-    if (f.hat) set(M.hat, slot, lx - 0.005, 0.61, 0, -lean, 0, U);
+    if (f.hat) set(M.hat, slot, -0.005, 0.095, 0, 0, 0, _head);
     else M.hat.setMatrixAt(slot, ZERO);
-    if (f.umbrella && !G) {
+    if (f.umbrella && !G && !carry) {
       set(M.arm, slot * 2 + 1, lx, 0.44, -0.12, 1.05, 0, U);
       set(M.umbrella, slot, 0.06, 0.5, -0.04, 0, 0, U);
     } else {
@@ -376,8 +587,10 @@ export class Crowd {
       M.umbrella.setMatrixAt(slot, ZERO);
     }
     set(M.arm, slot * 2, lx, 0.44, 0.12, armL, yawL, U);
+    if (carry) set(M.crate, slot, lx + 0.19, 0.43, 0, -lean, 0, U);
+    else M.crate.setMatrixAt(slot, ZERO);
     // the tool is modelled in the tool arm's space, so it follows the swing exactly
-    if (tool) set(M.handle, slot, lx, 0.44, -0.12, armR, yawR, U);
+    if (tool && !NO_HANDLE.has(tool)) set(M.handle, slot, lx, 0.44, -0.12, armR, yawR, U);
     else M.handle.setMatrixAt(slot, ZERO);
     for (const h of TOOL_HEADS) {
       if (h === tool) set(M[h], slot, lx, 0.44, -0.12, armR, yawR, U);

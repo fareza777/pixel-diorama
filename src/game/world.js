@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import * as K from '../engine/kit.js';
 import { fxMaterial, shared } from '../engine/materials.js';
 import { N, HALF, idx, inside, tileCenter, tileAt, WALKABLE, ROADS } from './island.js';
-import { BUILDINGS, BIOMES, NODES } from './data.js';
+import { BUILDINGS, BIOMES, NODES, SEASON_LOOK } from './data.js';
 import { buildingModel, nodeGeometry, materialFor, disposeModel, Builder } from './models.js';
-import { Crowd, GATHER_ANIMS } from './people.js';
+import { Crowd, GATHER_ANIMS, randomLook } from './people.js';
+import { Ambient } from './ambient.js';
 import { findPath } from './path.js';
 import { footprint, WALKABLE_BUILDINGS, SECONDS_PER_GAME_HOUR } from './game.js';
 
@@ -21,6 +22,45 @@ const hash = (k, s = 0) => {
   return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
 };
 const ease = (x) => x * x * (3 - 2 * x);
+const TAU = Math.PI * 2;
+
+// ---------------------------------------------------------------- villagers at work
+// What villagers do at each workplace: an animation from people.js (looped actions use their own
+// tool), an occasional second one for variety, and particles when the tool lands.
+const WORK_ANIM = {
+  ladang: { anim: 'hoe', alt: 'pick' }, kebun: { anim: 'pick', alt: 'carryStand' }, peternakan: { anim: 'pick', alt: 'sweep' },
+  penebang: { anim: 'chop' }, tambang: { anim: 'mine' }, bijih: { anim: 'mine', alt: 'dig' }, pasir: { anim: 'dig' },
+  nelayan: { anim: 'fish' }, bengkel: { anim: 'hammer', alt: 'saw' }, penggergajian: { anim: 'saw', alt: 'hammer' },
+  tungku: { anim: 'dig', alt: 'hammer' }, kaca: { anim: 'work', alt: 'hammer' }, kristal: { anim: 'work', alt: 'point' },
+  pasar: { anim: 'vend', alt: 'talk' }, toko: { anim: 'vend', alt: 'sweep' }, kedai: { anim: 'cook', alt: 'vend' },
+  sekolah: { anim: 'talk', alt: 'point' }, perpustakaan: { anim: 'sweep', alt: 'point' }, klinik: { anim: 'talk', alt: 'work' },
+  panggung: { anim: 'dance', alt: 'clap' }, gudang: { anim: 'work', alt: 'sweep' }, kincir: { anim: 'work' },
+};
+// porters carry a crate on the way to these jobs
+const CARRY_TO = new Set(['gudang', 'pasar', 'toko', 'kedai', 'penggergajian', 'bengkel', 'kebun']);
+// particles when a villager's tool lands: [colour, count, glow, height, reach]
+const HIT_FX = {
+  chop: ['#c9a070', 2, 1, 0.22, 0.34], mine: ['#c9ccd4', 2, 1, 0.2, 0.36], dig: ['#d8b98a', 3, 1, 0.05, 0.33], hoe: ['#8e6444', 3, 1, 0.04, 0.4],
+  hammer: ['#ffd08a', 2, 2.8, 0.2, 0.3], sweep: ['#d8d0c0', 2, 1, 0.03, 0.34], saw: ['#e3c690', 3, 1, 0.22, 0.3], pick: ['#5a9e4b', 1, 1, 0.25, 0.25],
+};
+// what busy buildings give off: local point, particles per second (at 2 workers) and the burst
+const WORK_FX = {
+  bengkel: { p: [-0.12, 0.18, 0.3], rate: 1.6, o: { n: 2, color: '#ffb05a', speed: 0.6, up: 0.9, life: 0.35, gravity: 4, glow: 3 } },
+  kedai: { p: [0.15, 0.75, -0.1], rate: 1.2, o: { n: 1, color: '#eef2f6', speed: 0.05, up: 0.3, life: 1.6, gravity: -0.3 } },
+  kristal: { p: [0, 1.3, 0], rate: 2.2, o: { n: 1, color: '#7df9ff', speed: 0.25, up: 0.4, life: 1.2, gravity: -0.5, glow: 3, spread: 0.3 } },
+  tungku: { p: [-0.05, 0.12, 0.3], rate: 2, o: { n: 1, color: '#ff8a3a', speed: 0.15, up: 0.7, life: 0.9, gravity: -0.4, glow: 3.5 } },
+  kaca: { p: [-0.18, 0.12, 0.22], rate: 1.6, o: { n: 2, color: '#ffc06a', speed: 0.4, up: 0.6, life: 0.4, gravity: 3, glow: 3 } },
+  penggergajian: { p: [0.12, 0.26, 0.05], rate: 3, o: { n: 2, color: '#e3c690', speed: 0.5, up: 0.5, life: 0.5, gravity: 2.5 } },
+  pasar: { p: [0, 0.6, 0], rate: 0.5, o: { n: 2, color: '#ffd23d', speed: 0.4, up: 1, life: 0.7, glow: 2.5, spread: 1 } },
+  toko: { p: [0, 0.55, 0.3], rate: 0.35, o: { n: 2, color: '#ffd23d', speed: 0.3, up: 0.9, life: 0.7, glow: 2.5 } },
+  sekolah: { p: [-0.1, 1.0, -0.45], rate: 0.4, o: { n: 1, color: '#ffe08a', speed: 0.1, up: 0.5, life: 1.2, gravity: -0.3, glow: 2 } },
+  panggung: { p: [0, 0.7, -0.15], rate: 1.6, o: { n: 1, color: '#ff8ad8', speed: 0.3, up: 0.6, life: 1.5, gravity: -0.35, glow: 2.6, spread: 0.6 } },
+  ladang: { p: [0, 0.3, 0], rate: 0.6, o: { n: 1, color: '#9ccf5a', speed: 0.3, up: 0.6, life: 0.9, gravity: 1, spread: 1.4 } },
+};
+const NOTE_COL = ['#ff8ad8', '#ffd23d', '#7fe08a', '#86b8e8', '#c9a0ff'];
+const BUILDER_LOOK = (r) => ({ ...randomLook(r), coat: '#e8913a', pants: '#3a4a6a', hat: '#ffd23d', tool: '#8a5a38', toolHead: '#9aa0aa' });
+const MAX_BUILDERS = 6;
+const _upV = new THREE.Vector3(0, 1, 0);
 
 // ---------------------------------------------------------------- gathering
 
@@ -47,6 +87,7 @@ const RES_COLOR = { wood: '#c9a070', stone: '#c9ccd4', food: '#e94f4f', ore: '#e
 const TOOL_COLORS = ['#8f877a', '#a19c92', '#c8cdd6', '#8ff4ff'];
 const UP = new THREE.Vector3(0, 1, 0);
 const _qa = new THREE.Quaternion(), _axis = new THREE.Vector3(), _tmpV = new THREE.Vector3();
+const _eclTop = new THREE.Color('#05060f'), _eclBot = new THREE.Color('#2a2040'), _eclTint = new THREE.Color('#9fa8ff');
 
 // ---------------------------------------------------------------- terrain colours
 
@@ -174,7 +215,13 @@ export class World {
     this.env = env;
     this.audio = audio;
     this.game = game;
-    this.quality = { grass: 1, mirror: true, lights: 6, smoke: true };
+    this.quality = { grass: 1, mirror: true, lights: 6, smoke: true, ambient: 1 };
+    this.dying = [];
+    this.builderCount = 0;
+    this.suspendSeason = false;
+    this._sb = [0, 1, 0, 0];
+    this._ecl = 0;
+    this._quakeT = 2;
     this.scene = null;
     this.buildings = new Map();
     this.npcs = new Map();
@@ -202,6 +249,7 @@ export class World {
     this.quality = { ...this.quality, ...q };
     if (!this.scene) return;
     if (relight) this._makeLightPool();
+    this.ambient?.setLevel(this.quality.ambient);
     this.engine.mirror = this.quality.mirror && this.hasWater ? { y: 0 } : null;
     this._grassDirty = true;
   }
@@ -219,7 +267,7 @@ export class World {
 
     this._buildTerrain();
     if (this.hasWater) this._buildWater();
-    this.crowd = new Crowd(110);
+    this.crowd = new Crowd(130);
     this.root.add(this.crowd.group);
     this.bursts = new Bursts();
     this.root.add(this.bursts.points);
@@ -242,8 +290,13 @@ export class World {
     this.rebuildNodes();
     this._buildGrass();
     this._makeLightPool();
+    this.builderCount = 0;
     this._spawnPeople();
     this._makeProps();
+    this.ambient = new Ambient(this);
+    this.ambient.setLevel(this.quality.ambient);
+    this.root.add(this.ambient.group);
+    this.ambient.attach();
 
     const B = BIOMES[biome];
     const maxH = Math.max(...I.h);
@@ -265,8 +318,16 @@ export class World {
 
   dispose() {
     if (!this.scene) return;
-    for (const b of this.buildings.values()) disposeModel(b.group);
+    for (const b of this.buildings.values()) {
+      disposeModel(b.group);
+      if (b.scaffold) disposeModel(b.scaffold);
+    }
     this.buildings.clear();
+    for (const d of this.dying) disposeModel(d.group);
+    this.dying = [];
+    this.ambient?.dispose();
+    this.ambient = null;
+    this.builderCount = 0;
     this.npcs.clear();
     for (const m of this.nodeMeshes.values()) m.dispose();
     this.nodeMeshes.clear();
@@ -554,6 +615,7 @@ export class World {
     const len = st.top * b.s;
     const at = new THREE.Vector3(b.x + a.dir.x * len * 0.75, b.y + 0.05, b.z + a.dir.z * len * 0.75);
     this.bursts.emit(at, { n: 16, color: '#d8c9a6', speed: 0.9, up: 0.45, life: 0.7, gravity: 1.5, spread: 0.4 });
+    this.engine.shake?.(0.035);
     if (st.leaf) this.bursts.emit(at.setY(b.y + 0.2), { n: 12, color: st.leaf, speed: 0.6, up: 0.9, life: 1.2, gravity: 0.8, spread: 0.35 });
   }
 
@@ -613,9 +675,21 @@ export class World {
     });
     const entry = { rec, group, anim: [], center: new THREE.Vector3(cx, h, cz), smoke: [] };
     group.traverse((o) => {
-      if (o.userData.spin || o.userData.clock || o.userData.bob || o.userData.pulse) entry.anim.push(o);
+      const u = o.userData;
+      if (u.spin || u.clock || u.bob || u.pulse || u.float || u.flag || u.swing || u.seesaw) {
+        u.y0 = o.position.y;
+        u.ph = Math.random() * 10;
+        entry.anim.push(o);
+      }
     });
-    if (!rec.built) group.scale.set(1, 0.02, 1);
+    entry.builders = [];
+    if (!rec.built) {
+      // a scaffold stands around the site until the building is done
+      const box = new THREE.Box3().setFromObject(group);
+      entry.height = Math.min(2.6, Math.max(0.45, box.max.y - h));
+      this._makeScaffold(entry, s);
+      group.scale.set(1, 0.02, 1);
+    }
     this.root.add(group);
     this.buildings.set(rec.id, entry);
     // chimney smoke
@@ -637,11 +711,96 @@ export class World {
     return entry;
   }
 
-  removeBuilding(rec) {
+  /** Scaffolding (poles, planks, braces) around a building site. */
+  _makeScaffold(e, size) {
+    const b = new Builder();
+    const w = size * 0.94, H = e.height + 0.08, hw = w / 2;
+    for (const [x, z] of [[-hw, -hw], [hw, -hw], [-hw, hw], [hw, hw]]) b.box(0.03, H, 0.03, '#9a6a46', x, 0, z, {}, 'rough');
+    for (let y = 0.28; y < H; y += 0.3) {
+      b.box(w, 0.022, 0.06, '#c9a070', 0, y, hw, {}, 'rough');
+      b.box(w, 0.022, 0.06, '#c9a070', 0, y, -hw, {}, 'rough');
+      b.box(0.06, 0.022, w, '#c9a070', hw, y, 0, {}, 'rough');
+      b.box(0.06, 0.022, w, '#c9a070', -hw, y, 0, {}, 'rough');
+    }
+    const diag = Math.atan2(w, Math.min(H, 0.9));
+    b.box(0.02, Math.hypot(w, Math.min(H, 0.9)), 0.02, '#8a5a38', 0, 0, hw + 0.02, { rz: diag, x: -hw });
+    b.box(0.02, Math.hypot(w, Math.min(H, 0.9)), 0.02, '#8a5a38', hw + 0.02, 0, 0, { rx: -diag, z: -hw });
+    // a pile of materials
+    b.box(0.2, 0.06, 0.1, '#c9a070', hw + 0.16, 0, hw - 0.1, { ry: 0.3 }, 'rough');
+    b.box(0.12, 0.1, 0.12, '#a8794c', hw + 0.14, 0, hw - 0.3, {}, 'rough');
+    const g = b.build();
+    g.position.copy(e.group.position);
+    g.rotation.y = e.group.rotation.y;
+    g.traverse((o) => (o.raycast = () => {}));
+    this.root.add(g);
+    e.scaffold = g;
+  }
+
+  _dropScaffold(e) {
+    if (!e.scaffold) return;
+    this.dying.push({ group: e.scaffold, t: 0, scaffold: true, y0: e.scaffold.position.y, center: e.center.clone() });
+    e.scaffold = null;
+  }
+
+  _releaseBuilders(e, burst = false) {
+    for (const bd of e.builders || []) {
+      if (burst) this.bursts.emit(bd.pos.clone().setY(bd.pos.y + 0.3), { n: 6, color: '#ffe08a', speed: 0.6, up: 1, life: 0.6, glow: 2 });
+      this.crowd.release(bd.slot);
+      this.builderCount--;
+    }
+    e.builders = [];
+  }
+
+  /** Builders hammer away around unfinished buildings. */
+  _updateSite(e, dt) {
+    const s = BUILDINGS[e.rec.type].size;
+    const want = this.quality.ambient > 0.3 ? (s > 1 ? 2 : 1) : 0;
+    while (e.builders.length < want && this.builderCount < MAX_BUILDERS) {
+      const slot = this.crowd.alloc(BUILDER_LOOK(Math.random));
+      if (slot < 0) break;
+      this.builderCount++;
+      const n = e.builders.length;
+      const hw = s * 0.47 + 0.22;
+      const side = [[hw, 0.1], [-0.1, hw], [-hw, -0.1], [0.1, -hw]][(n * 2 + (e.rec.id % 2)) % 4];
+      const ry = e.group.rotation.y;
+      const x = e.center.x + side[0] * Math.cos(ry) + side[1] * Math.sin(ry), z = e.center.z - side[0] * Math.sin(ry) + side[1] * Math.cos(ry);
+      const pos = new THREE.Vector3(x, this.heightAt(x, z), z);
+      const bd = { slot, pos, yaw: Math.atan2(-(e.center.z - z), e.center.x - x), phase: Math.random() * 10, pace: 0.85 + Math.random() * 0.3, scale: 0.95 + Math.random() * 0.1, hit: 0 };
+      e.builders.push(bd);
+      this.bursts.emit(pos.clone().setY(pos.y + 0.3), { n: 8, color: '#c9b48a', speed: 0.5, up: 0.8, life: 0.5 });
+    }
+    const T = GATHER_ANIMS.hammer.T;
+    for (const bd of e.builders) {
+      const u0 = (bd.phase / TAU) % 1;
+      bd.phase += (dt * TAU * bd.pace) / T;
+      const u1 = (bd.phase / TAU) % 1;
+      if (u1 < u0 || (u0 < GATHER_ANIMS.hammer.hit && u1 >= GATHER_ANIMS.hammer.hit)) {
+        const fx = Math.cos(bd.yaw), fz = -Math.sin(bd.yaw);
+        this.bursts.emit(_tmpV.set(bd.pos.x + fx * 0.3, bd.pos.y + 0.2 + Math.random() * 0.2, bd.pos.z + fz * 0.3), { n: 2, color: Math.random() < 0.5 ? '#ffd08a' : '#c9b48a', speed: 0.5, up: 0.7, life: 0.35, gravity: 3, glow: 2 });
+        if (Math.random() < 0.12) this.audio.play('chop');
+      }
+    }
+  }
+
+  removeBuilding(rec, animate = true) {
     const e = this.buildings.get(rec.id);
     if (!e) return;
-    this.root.remove(e.group);
-    disposeModel(e.group);
+    this._releaseBuilders(e);
+    if (e.scaffold) {
+      this.root.remove(e.scaffold);
+      disposeModel(e.scaffold);
+      e.scaffold = null;
+    }
+    if (animate) {
+      // the old building shudders, sinks and crumbles away before it disappears
+      this.dying.push({ group: e.group, t: 0, y0: e.group.position.y, center: e.center.clone(), size: BUILDINGS[rec.type].size });
+      e.group.traverse((o) => (o.raycast = () => {}));
+      this.engine.shake?.(0.06);
+      this.audio.play('crumble');
+    } else {
+      this.root.remove(e.group);
+      disposeModel(e.group);
+    }
     for (const sm of e.smoke) {
       this.root.remove(sm);
       sm.geometry.dispose();
@@ -659,10 +818,11 @@ export class World {
   refreshBuilding(rec) {
     const e = this.buildings.get(rec.id);
     const progress = e?.group.scale.y ?? 1;
-    this.removeBuilding(rec);
+    this.removeBuilding(rec, false);
     const n = this.addBuilding(rec);
     if (!rec.built) n.group.scale.y = progress;
-    else this.bursts.emit(n.center.clone().add(new THREE.Vector3(0, 0.5, 0)), { n: 18, color: '#ffe08a', speed: 1, up: 1.6, life: 0.8, glow: 2 });
+    else n.pop = 0;
+    if (rec.built) this.bursts.emit(n.center.clone().add(new THREE.Vector3(0, 0.5, 0)), { n: 18, color: '#ffe08a', speed: 1, up: 1.6, life: 0.8, glow: 2 });
     if (this.selected?.id === rec.id) this.select(rec);
   }
 
@@ -820,7 +980,7 @@ export class World {
   addNpc(p, initial = false) {
     const slot = this.crowd.alloc(p.look);
     if (slot < 0) return null;
-    const rt = { p, slot, pos: new THREE.Vector3(), yaw: Math.random() * 6, anim: 'idle', phase: Math.random() * 10, path: null, pi: 0, mode: 'idle', goal: null, think: Math.random(), wait: 0, ox: (Math.random() - 0.5) * 0.4, oz: (Math.random() - 0.5) * 0.4, speed: 0.85 + Math.random() * 0.25, scale: 0.9 + Math.random() * 0.15, visible: true };
+    const rt = { noUmb: hash(p.id, 9) < 0.28, fid: null, fidT: Math.random() * 6, workAlt: 0, altT: 4 + Math.random() * 8, tool: false, p, slot, pos: new THREE.Vector3(), yaw: Math.random() * 6, anim: 'idle', phase: Math.random() * 10, path: null, pi: 0, mode: 'idle', goal: null, think: Math.random(), wait: 0, ox: (Math.random() - 0.5) * 0.4, oz: (Math.random() - 0.5) * 0.4, speed: 0.85 + Math.random() * 0.25, scale: 0.9 + Math.random() * 0.15, visible: true };
     this.npcs.set(p.id, rt);
     // start where the routine says they should be
     const want = this._want(rt);
@@ -1020,7 +1180,16 @@ export class World {
         rt.mode = 'work';
         rt.at = p.job;
         const job = g.buildingById(p.job);
-        if (job) this._face(rt, this.buildings.get(job.id)?.center);
+        const je = job && this.buildings.get(job.id);
+        if (je) this._face(rt, je.center);
+        // fishers walk out onto the pier and face the water
+        if (job?.type === 'nelayan' && je) {
+          const ry = je.group.rotation.y;
+          const lx = 0.15, lz = 0.55 + (p.id % 2) * 0.22;
+          rt.pier = { tile: tileAt(rt.pos.x, rt.pos.z) };
+          rt.pos.set(je.center.x + lx * Math.cos(ry) + lz * Math.sin(ry), je.center.y + 0.06, je.center.z - lx * Math.sin(ry) + lz * Math.cos(ry));
+          rt.yaw = Math.atan2(-Math.cos(ry), Math.sin(ry));
+        }
         break;
       }
       case 'eat': {
@@ -1038,6 +1207,7 @@ export class World {
         break;
       case 'festival':
         rt.mode = want.pose === 'wave' ? 'cheer' : 'dance';
+        rt.festPose = want.pose || 'dance';
         break;
       default:
         rt.mode = 'idle';
@@ -1095,6 +1265,11 @@ export class World {
       this._arrive(rt, want, tile);
       return;
     }
+    if (rt.pier) {
+      // back off the pier before walking anywhere
+      this._placeAt(rt, rt.pier.tile, false);
+      rt.pier = null;
+    }
     if (rt.mode === 'inside') {
       // step out of the door
       const home = g.buildingById(rt.at);
@@ -1125,7 +1300,7 @@ export class World {
     const dx = gx - rt.pos.x, dz = gz - rt.pos.z;
     const d = Math.hypot(dx, dz);
     const road = ROADS.has(this.I.t[idx(ti, tj)]);
-    const speed = rt.speed * (road ? 1.45 : 1) * this.walkScale;
+    const speed = rt.speed * (road ? 1.45 : 1) * this.walkScale * (rt.run ? 1.75 : 1);
     const step = speed * dt;
     if (d <= step) {
       rt.pos.x = gx;
@@ -2402,19 +2577,52 @@ export class World {
         const s = k < 1 ? Math.min(1, 1 - Math.pow(1 - k, 3) * 1.0) : 1;
         e.group.scale.set(1, Math.max(0.02, s), 1);
         if (Math.random() < dt * 8) this.bursts.emit(e.center.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.05, (Math.random() - 0.5) * 0.8)), { n: 2, color: '#c9b48a', speed: 0.5, up: 0.6, life: 0.6 });
+        // the rising building wobbles a little as it goes up
+        e.group.rotation.z = Math.sin(this.time * 9 + r.id) * 0.008 * (1 - k);
+        this._updateSite(e, dt);
         if (r.progress >= 1) {
           e.group.scale.set(1, 1, 1);
+          e.group.rotation.z = 0;
           g.finishConstruction(r);
           this.audio.play('place');
           this.bursts.emit(e.center.clone().add(new THREE.Vector3(0, 0.4, 0)), { n: 28, color: '#ffe08a', speed: 1.4, up: 2, life: 1, glow: 2.5 });
+          // a ring of dust, a bounce and a thump
+          this.bursts.emit(e.center.clone().add(new THREE.Vector3(0, 0.06, 0)), { n: 26, color: '#d8c9a6', speed: 1.8, up: 0.25, life: 0.6, gravity: 1.2, spread: 0.3 });
+          this._releaseBuilders(e, true);
+          this._dropScaffold(e);
+          e.pop = 0;
+          this.engine.shake?.(0.045);
           for (const sm of e.smoke) sm.material.uniforms.uOn.value = 0.9;
           this._lightTimer = 0;
           this.engine._forceShadow = true;
         }
       }
+      if (e.pop !== undefined) {
+        // squash and stretch when a building is finished or upgraded
+        e.pop += dt;
+        const t = e.pop, q = Math.exp(-5.5 * t) * Math.sin(t * 17);
+        e.group.scale.set(1 - q * 0.07, 1 + q * 0.14, 1 - q * 0.07);
+        if (t > 1.1) {
+          e.group.scale.set(1, 1, 1);
+          e.pop = undefined;
+        }
+      }
       for (const o of e.anim) {
-        if (o.userData.spin === 'z') o.rotation.z += dt * (1.2 + env.cur.wind * 3);
-        if (o.userData.spin === 'y') o.rotation.y += dt * 0.9;
+        const u = o.userData;
+        if (u.spin === 'z') o.rotation.z += dt * (1.2 + env.cur.wind * 3);
+        if (u.spin === 'y') o.rotation.y += dt * 0.9;
+        if (u.spin === 'saw') o.rotation.z -= dt * (this.presence.get(e.rec.id) || !e.rec.built ? 14 : 2);
+        if (u.float) {
+          o.position.y = u.y0 + Math.sin(this.time * 1.8 + u.ph) * 0.06;
+          o.rotation.y += dt * 0.9;
+        }
+        if (u.flag) {
+          o.rotation.y = Math.sin(this.time * 3.1 + u.ph) * 0.35 * (0.35 + env.cur.wind) + 0.3;
+          o.scale.x = 1 + Math.sin(this.time * 7.3 + u.ph) * 0.07;
+          o.scale.y = 1 - Math.abs(Math.sin(this.time * 2.1 + u.ph)) * 0.05;
+        }
+        if (u.swing) o.rotation.z = Math.sin(this.time * 2.3 + u.swing * 1.7) * 0.5;
+        if (u.seesaw) o.rotation.z = Math.sin(this.time * 1.4 + u.ph) * 0.22;
         if (o.userData.bob) o.scale.y = 1 + Math.sin(this.time * 6) * 0.15;
         if (o.userData.pulse) o.scale.setScalar(1 + ((this.time * 1.5) % 1) * 0.6);
         if (o.userData.clock) {
@@ -2429,23 +2637,30 @@ export class World {
     this.presence.clear();
     const festival = g.s.event?.id === 'festival' && g.s.event.island === g.biome;
     const raining = env.cur.rain > 0.25 || env.cur.snow > 0.4;
+    const quake = g.evFx().quake;
+    this._cold = env.cur.snow > 0.3 || (this._sb[3] > 0.5 && SEASON_LOOK[this.biome]?.snow > 0) || g.evFx().burnWood;
     for (const rt of this.npcs.values()) {
       rt.think -= dt;
       if (rt.think <= 0) {
         rt.think = 0.8 + Math.random() * 0.6;
         this._think(rt);
       }
+      rt.tool = false;
       if (rt.mode === 'walk') {
+        const job = rt.goal?.kind === 'work' ? g.buildingById(rt.p.job) : null;
+        const lh = ((g.s.time.hour - (rt.p.offs || 0)) % 24 + 24) % 24;
+        rt.carry = !!job && CARRY_TO.has(job.type);
+        rt.run = (raining && rt.noUmb && !rt.carry) || (!!job && lh > 8.3 && lh < 9.6) || !!quake;
         if (this._move(rt, dt)) this._arrive(rt, rt.goal, rt.goalTile);
+        if (rt.mode === 'walk' || rt.anim === 'walk') rt.anim = rt.run ? 'run' : rt.carry ? 'carry' : 'walk';
       } else {
-        rt.phase += dt * 2;
-        rt.anim = rt.mode === 'work' ? 'work' : rt.mode === 'dance' ? 'dance' : rt.mode === 'cheer' ? 'wave' : rt.mode === 'leisure' ? (rt.chat > this.time ? 'talk' : 'idle') : 'idle';
-        if (rt.talkHold > this.time) rt.anim = 'wave';
+        rt.run = rt.carry = false;
+        this._npcAnim(rt, dt, raining);
       }
       if (rt.mode === 'work' && rt.at) this.presence.set(rt.at, (this.presence.get(rt.at) || 0) + (g.traitOf(rt.p).work || 1));
       g.npcTick(rt.p, { sleeping: rt.mode === 'inside' && (g.s.time.hour >= 21 || g.s.time.hour < 7), leisure: rt.mode === 'leisure' || rt.mode === 'dance' || rt.mode === 'cheer', working: rt.mode === 'work', festival }, dtH);
       rt.visible = rt.mode !== 'inside';
-      rt.umbrella = raining && rt.visible && rt.mode !== 'work';
+      rt.umbrella = raining && rt.visible && rt.mode !== 'work' && !rt.noUmb && !rt.carry && !GATHER_ANIMS[rt.anim];
       // emotes
       if (!rt.emote || rt.emote.until < this.time) {
         rt.emote = null;
@@ -2501,8 +2716,11 @@ export class World {
         this.crowd.hide(rt.slot);
         continue;
       }
-      this.crowd.pose(rt.slot, { pos: rt.pos, yaw: rt.yaw, scale: rt.scale, anim: rt.anim, phase: rt.phase, umbrella: rt.umbrella, hat: !!rt.p.look.hat, long: rt.p.look.long });
+      this.crowd.pose(rt.slot, { pos: rt.pos, yaw: rt.yaw, scale: rt.scale, anim: rt.anim, phase: rt.phase, umbrella: rt.umbrella, hat: !!rt.p.look.hat, long: rt.p.look.long, tool: rt.tool });
     }
+    // construction crews
+    for (const e of this.buildings.values())
+      for (const bd of e.builders || []) this.crowd.pose(bd.slot, { pos: bd.pos, yaw: bd.yaw, scale: bd.scale, anim: 'hammer', phase: bd.phase, hat: true, tool: true });
     const m = this.mayor;
     const gt = m.task?.kind === 'gather' ? m.task : null;
     const gathering = gt && m.anim === gt.st?.anim;
@@ -2514,6 +2732,11 @@ export class World {
     this._updateNodeAnims(dt);
     this._updateProps(dt);
     this._updateEventFx(dt);
+    this._updateWorkFx(dt);
+    this._updateDying(dt);
+    this._updateSeason();
+    this._updateSpectacle(dt);
+    this.ambient?.update(dt);
     this.bursts.update(dt);
     if (this._markerT > 0) {
       this._markerT -= dt;
@@ -2541,6 +2764,178 @@ export class World {
         this._grassAcc = 0;
         this._grassDirty = false;
         this._buildGrass();
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- villager animation variety
+
+  /** Animation for a villager who is not walking: job actions, chats, fidgets, festival moves. */
+  _npcAnim(rt, dt, raining) {
+    const g = this.game, T = this.time;
+    let anim = 'idle', rate = 2;
+    if (rt.mode === 'work') {
+      const job = g.buildingById(rt.p.job);
+      const W = (job && WORK_ANIM[job.type]) || { anim: 'work' };
+      rt.altT -= dt;
+      if (rt.altT <= 0) {
+        rt.altT = 5 + Math.random() * 9;
+        rt.workAlt = W.alt && W.alt !== 'carryStand' && Math.random() < 0.3 ? 1 : 0;
+      }
+      anim = rt.workAlt ? W.alt : W.anim;
+      const A = GATHER_ANIMS[anim];
+      if (A) {
+        rt.tool = true;
+        rate = (TAU / A.T) * (0.85 + hash(rt.p.id, 5) * 0.3);
+        const u0 = (rt.phase / TAU) % 1, u1 = ((rt.phase + dt * rate) / TAU) % 1;
+        if (u1 < u0 ? A.hit >= u0 || A.hit < u1 : u0 < A.hit && u1 >= A.hit) this._workHit(rt, anim);
+      }
+      // a quick look up from the work now and then
+      if (!A && Math.random() < dt * 0.05) rt.fid = { a: 'lookAround', until: T + 2.5 };
+    } else if (rt.mode === 'dance' || rt.mode === 'cheer') {
+      const base = rt.mode === 'cheer' ? 'wave' : rt.festPose || 'dance';
+      const k = Math.floor(T / 4.5 + hash(rt.p.id, 2) * 7) % 5;
+      anim = [base, base, 'cheer', 'clap', base === 'dance' ? 'dance' : 'cheer'][k];
+    } else if (rt.mode === 'leisure' || rt.mode === 'idle') {
+      if (rt.chat > T) {
+        // one talks, the other laughs, then they swap
+        anim = Math.floor(T * 0.6 + hash(rt.p.id, 3) * 3) % 3 === 0 ? 'laugh' : 'talk';
+      } else {
+        const spot = rt.mode === 'leisure' && rt.spot ? this.buildings.get(rt.spot)?.rec.type : null;
+        if (spot === 'panggung') anim = Math.floor(T / 5 + hash(rt.p.id, 4) * 4) % 3 ? 'dance' : 'clap';
+        else if (spot === 'taman_bermain') anim = Math.floor(T / 4 + hash(rt.p.id, 4) * 4) % 3 ? 'cheer' : 'laugh';
+        else {
+          rt.fidT -= dt;
+          if (rt.fidT <= 0) {
+            if (rt.fid) {
+              rt.fid = null;
+              rt.fidT = 3 + Math.random() * 7;
+            } else {
+              const h = g.s.time.hour;
+              const pool = this._cold ? ['shiver', 'shiver', 'lookAround'] : h > 20.5 || h < 7 ? ['stretch', 'lookAround'] : ['lookAround', 'stretch', 'point', 'lookAround', 'clap'];
+              rt.fid = { a: pool[Math.floor(Math.random() * pool.length)] };
+              rt.fidT = 2.5 + Math.random() * 2.5;
+            }
+          }
+          if (rt.fid) anim = rt.fid.a;
+        }
+      }
+    }
+    if (rt.fid?.until && rt.fid.until > T && rt.mode === 'work') anim = rt.fid.a;
+    else if (rt.fid?.until && rt.fid.until <= T) rt.fid = null;
+    if (rt.talkHold > T) anim = 'wave';
+    if (anim === 'shiver' || anim === 'clap' || anim === 'laugh') rate = 2.2;
+    rt.phase += dt * rate;
+    rt.anim = anim;
+  }
+
+  /** A villager's tool lands: chips, sparks, dust, a splash for the fishers. */
+  _workHit(rt, anim) {
+    if (Math.random() > this.quality.ambient) return;
+    const fx = Math.cos(rt.yaw), fz = -Math.sin(rt.yaw);
+    if (anim === 'fish') {
+      const x = rt.pos.x + fx * 0.85, z = rt.pos.z + fz * 0.85;
+      this.bursts.emit(_tmpV.set(x, 0.03, z), { n: 5, color: '#e6f6ff', speed: 0.35, up: 0.8, life: 0.4, gravity: 4 });
+      this.ambient?._ripple(x, z, 0.9);
+      return;
+    }
+    const H = HIT_FX[anim];
+    if (!H) return;
+    const sc = rt.scale || 1;
+    this.bursts.emit(_tmpV.set(rt.pos.x + fx * H[4] * sc, rt.pos.y + H[3], rt.pos.z + fz * H[4] * sc), { n: H[1], color: H[0], speed: 0.45, up: 0.7, life: 0.4, gravity: 3, glow: H[2] });
+  }
+
+  /** Busy buildings give off sparks, steam, sawdust, coins or music notes. */
+  _updateWorkFx(dt) {
+    const L = this.quality.ambient;
+    if (L <= 0) return;
+    const h = this.game.s.time.hour;
+    for (const e of this.buildings.values()) {
+      const W = WORK_FX[e.rec.type];
+      if (!W || !e.rec.built || e.dyingSoon) continue;
+      let workers = this.presence.get(e.rec.id) || 0;
+      if (e.rec.type === 'panggung' && h >= 17 && h < 22) workers = Math.max(workers, 2);
+      if (!workers || e.rec.stalled) continue;
+      if (Math.random() > dt * W.rate * Math.min(2, workers) * 0.5 * L) continue;
+      const ry = e.group.rotation.y, [lx, ly, lz] = W.p;
+      _tmpV.set(e.center.x + lx * Math.cos(ry) + lz * Math.sin(ry), e.center.y + ly, e.center.z - lx * Math.sin(ry) + lz * Math.cos(ry));
+      const o = e.rec.type === 'panggung' ? { ...W.o, color: NOTE_COL[Math.floor(Math.random() * NOTE_COL.length)] } : W.o;
+      this.bursts.emit(_tmpV, o);
+    }
+  }
+
+  /** Demolished buildings shudder, sink and crumble; dropped scaffolds fold away. */
+  _updateDying(dt) {
+    for (let n = this.dying.length - 1; n >= 0; n--) {
+      const d = this.dying[n];
+      d.t += dt;
+      const g = d.group;
+      if (d.scaffold) {
+        const k = Math.min(1, d.t / 0.5);
+        g.scale.set(1, Math.max(0.001, 1 - ease(k)), 1);
+        if (k >= 1) {
+          this.root.remove(g);
+          disposeModel(g);
+          this.dying.splice(n, 1);
+        }
+        continue;
+      }
+      const T1 = 0.75, k = Math.min(1, d.t / T1);
+      g.position.y = d.y0 - ease(k) * 0.35 * (d.size || 1);
+      g.rotation.x = Math.sin(d.t * 47) * 0.025 * (1 - k);
+      g.rotation.z = Math.sin(d.t * 39 + 1) * 0.025 * (1 - k);
+      g.scale.set(1 + k * 0.05, Math.max(0.001, 1 - k * k), 1 + k * 0.05);
+      if (Math.random() < dt * 22) this.bursts.emit(_tmpV.set(d.center.x + (Math.random() - 0.5) * (d.size || 1), d.center.y + 0.1 + Math.random() * 0.3, d.center.z + (Math.random() - 0.5) * (d.size || 1)), { n: 3, color: Math.random() < 0.5 ? '#c9b48a' : '#a8a29a', speed: 0.7, up: 1, life: 0.7 });
+      if (k >= 1) {
+        this.root.remove(g);
+        disposeModel(g);
+        this.dying.splice(n, 1);
+        this.engine._forceShadow = true;
+      }
+    }
+  }
+
+  /** Season colours for the foliage shader and snow that stays on the ground in winter. */
+  _updateSeason() {
+    const g = this.game, sb = g.seasonBlend(this._sb);
+    shared.uSeason.value.set(sb[0], sb[1], sb[2], sb[3]);
+    const look = SEASON_LOOK[this.biome] || { amt: 1, snow: 0 };
+    shared.uSeasonAmt.value = this.suspendSeason ? 0 : look.amt;
+    this.env.snowFloor = this.suspendSeason ? 0 : sb[3] * look.snow * smooth(0.2, 1, sb[3]);
+  }
+
+  /** Big moments: a solar eclipse darkens the sky, tremors shake the island. */
+  _updateSpectacle(dt) {
+    const g = this.game, fx = g.evFx(), env = this.env;
+    // eclipse
+    this._ecl += ((fx.eclipse ? 1 : 0) - this._ecl) * Math.min(1, dt * 0.5);
+    if (this._ecl > 0.005 && !this.suspendSeason) {
+      const k = this._ecl, P = env.post;
+      P.skyTop.lerp(_eclTop, k * 0.9);
+      P.skyBottom.lerp(_eclBot, k * 0.85);
+      P.stars = Math.max(P.stars, k * 0.85);
+      P.tint.lerp(_eclTint, k * 0.6);
+      env.key.intensity *= 1 - 0.85 * k;
+      env.hemi.intensity *= 1 - 0.45 * k;
+      env.lampsOverride = k > 0.35 ? 1 : null;
+      this._eclOn = true;
+    } else if (this._eclOn) {
+      env.lampsOverride = null;
+      this._eclOn = false;
+    }
+    // tremors
+    if (fx.quake) {
+      this._quakeT -= dt;
+      if (this._quakeT <= 0) {
+        this._quakeT = 3 + Math.random() * 4;
+        this.engine.shake?.(0.16);
+        this.audio.play('rumble');
+        let n = 0;
+        for (const e of this.buildings.values()) {
+          if (n++ > 6) break;
+          if (Math.random() < 0.5) this.bursts.emit(_tmpV.copy(e.center).setY(e.center.y + 0.2), { n: 8, color: '#b8ab98', speed: 0.9, up: 0.8, life: 0.8, spread: 0.6 });
+          e.pop = 0.35;
+        }
       }
     }
   }
@@ -2706,4 +3101,13 @@ const EV_VIS = {
   butterflies: { motes: [[M_BFLY, 50]] },
   aurora: { aurora: true, motes: [[M_FLY, 24]], loops: { hum: 0.3 }, chord: 14 },
   bloom: { motes: [[M_PETAL, 60]], flowers: 0.35 },
+  // v1.1
+  springfair: { motes: [[M_PETAL, 40], [M_HANG, 14]], confetti: 1.8, flowers: 0.6, sfx: ['bell', 11, { pitch: 1.3 }] },
+  harvestfest: { motes: [[M_EMBER, 22], [M_HANG, 16]], flowers: 0.5, flowersAt: 'farms', flowerCol: ['#e8823a', '#ffd23d', '#e94f4f', '#c86a2a'], confetti: 2.6, tint: [1.05, 0.98, 0.9] },
+  snowfest: { motes: [[M_HANG, 20]], confetti: 2.2, chimney: 0.9, loops: { fire: 0.12 } },
+  drought: { motes: [[M_HEAT, 40]], tint: [1.08, 1.0, 0.86], loops: { cicadas: 0.6 } },
+  eclipse: { motes: [[M_FLY, 30]], loops: { hum: 0.35 }, chord: 9 },
+  migration: { sfx: ['gull', 5] },
+  earthquake: { loops: { howl: 0.15 } },
+  tourists: { coins: 1.1, confetti: 4, confettiAt: 'homes' },
 };

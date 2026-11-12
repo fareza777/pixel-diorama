@@ -20,7 +20,7 @@ function setup() {
   eng = new PixelEngine(canvas);
   eng.renderer.setClearColor(0x000000, 0);
   eng.setOutput(SIZE, SIZE);
-  Object.assign(eng.look, { pixelSize: 2, vignette: 0, bloom: 0.5, outline: 0.55 });
+  Object.assign(eng.look, { pixelSize: 2, vignette: 0, bloom: 0.5, outline: 0.55, tilt: 0, haze: 0, split: 0 });
   eng.applyLook();
   scene = new THREE.Scene();
   env = new Environment();
