@@ -2,10 +2,16 @@
 // carefully back up) to hold 60 fps. Also caps rendering at 60 fps on high-refresh screens.
 
 export const TIERS = {
-  low: { name: 'Rendah', shadow: 1024, shadowEvery: 2, bloom: 0, mirror: false, lights: 2, grass: 0.35, smoke: false, outline: 0.45 },
-  medium: { name: 'Sedang', shadow: 1024, shadowEvery: 1, bloom: 0.75, mirror: false, lights: 4, grass: 0.7, smoke: true, outline: 0.5 },
-  high: { name: 'Tinggi', shadow: 2048, shadowEvery: 1, bloom: 0.9, mirror: true, lights: 6, grass: 1, smoke: true, outline: 0.5 },
+  low: { name: 'Low', shadow: 1024, shadowEvery: 2, bloom: 0, mirror: false, lights: 2, grass: 0.35, smoke: false, outline: 0.45 },
+  medium: { name: 'Medium', shadow: 1024, shadowEvery: 1, bloom: 0.75, mirror: false, lights: 4, grass: 0.7, smoke: true, outline: 0.5 },
+  high: { name: 'High', shadow: 2048, shadowEvery: 1, bloom: 0.9, mirror: true, lights: 6, grass: 1, smoke: true, outline: 0.5 },
 };
+// Below the low tier the game gives up detail in this order (Perf.extraPixel):
+//   1 = drop the crease highlights (the costliest part of the pixel pass), same resolution
+//   2 = one step bigger art pixels
+// Bigger steps made the picture look blurry on 1080p phones, so they are not used any more.
+export const MAX_EXTRA = 2;
+export const extraPixelSize = (extra) => Math.max(0, extra - 1);
 const ORDER = ['low', 'medium', 'high'];
 
 export function guessTier() {
@@ -80,7 +86,7 @@ export class Perf {
       this.lowWindows = 0;
       const i = ORDER.indexOf(this.tier);
       if (i > 0) this.tier = ORDER[i - 1];
-      else if (this.extraPixel < 2) this.extraPixel++;
+      else if (this.extraPixel < MAX_EXTRA) this.extraPixel++;
       else return;
       this.lastChange = now;
       this.apply(this.tier, this.extraPixel);

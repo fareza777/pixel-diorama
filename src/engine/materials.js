@@ -39,6 +39,41 @@ function gradient(values) {
   return t;
 }
 
+// Pixel Diorama: cloud shadows and puddles used a 3-octave procedural fbm per pixel (24 hashes),
+// which alone cost ~16 ms a frame on mid-range phones. They now read this tileable fbm texture
+// instead: one filtered fetch. It covers 8x8 noise cells, so the repeat is never visible on an island.
+function fbmTexture(size = 256, period = 8) {
+  const hash = (x, y) => {
+    let h = Math.imul(x * 374761393 + y * 668265263, 1274126177);
+    h = Math.imul(h ^ (h >>> 13), 1103515245);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const noise = (x, y, p) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    let fx = x - xi, fy = y - yi;
+    fx = fx * fx * (3 - 2 * fx);
+    fy = fy * fy * (3 - 2 * fy);
+    const w = (v) => ((v % p) + p) % p;
+    const a = hash(w(xi), w(yi)), b = hash(w(xi + 1), w(yi)), c = hash(w(xi), w(yi + 1)), d = hash(w(xi + 1), w(yi + 1));
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  };
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const u = (x / size) * period, v = (y / size) * period;
+      const n = noise(u, v, period) * 0.55 + noise(u * 2 + 4.3, v * 2 + 1.7, period * 2) * 0.3 + noise(u * 4 + 9.1, v * 4 + 2.9, period * 4) * 0.15;
+      const k = Math.round(n * 255);
+      data.set([k, k, k, 255], (y * size + x) * 4);
+    }
+  const t = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.minFilter = t.magFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  return t;
+}
+shared.uFbmTex = { value: fbmTexture() };
+
 // Toon light ramps, read by N·L from -1 (first value) to 1 (last value). Stepped = pixel-art banding.
 export const RAMPS = {
   soft: gradient([0, 0, 0, 150, 205, 255]),
@@ -120,6 +155,7 @@ uniform float uWetAffect;
 uniform float uGlow;
 uniform float uClipOn;
 uniform float uClipY;
+uniform sampler2D uFbmTex;
 varying vec3 vNxWorld;
 varying vec3 vNxWorldNormal;
 layout(location = 1) out highp vec4 gNormal;
@@ -158,15 +194,18 @@ float nxNoise(vec3 x) {
   return mix(mix(mix(nxHash(i), nxHash(i + vec3(1, 0, 0)), f.x), mix(nxHash(i + vec3(0, 1, 0)), nxHash(i + vec3(1, 1, 0)), f.x), f.y),
              mix(mix(nxHash(i + vec3(0, 0, 1)), nxHash(i + vec3(1, 0, 1)), f.x), mix(nxHash(i + vec3(0, 1, 1)), nxHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
-float nxFbm(vec2 p) { return nxNoise(vec3(p, 1.7)) * 0.55 + nxNoise(vec3(p * 2.1, 4.3)) * 0.3 + nxNoise(vec3(p * 4.3, 9.1)) * 0.15; }
+float nxFbm(vec2 p) { return texture2D(uFbmTex, p * 0.125).r; }
 `;
 
 const FRAG_SURFACE = /* glsl */`
 if (uClipOn > 0.5 && vNxWorld.y < uClipY) discard;
 {
-  float nxA = nxNoise(vNxWorld * uNoiseScale);
-  float nxB = nxNoise(vNxWorld * uNoiseScale * 2.9 + 7.3);
-  diffuseColor.rgb *= 1.0 + ((nxA * 0.6 + nxB * 0.4) - 0.5) * uNoiseAmt * uTexture;
+  // surface texture: two fetches of the fbm texture, projected so vertical faces get grain too
+  // (was two procedural 3D value noises, 16 hashes per pixel)
+  vec2 nxP = vec2(vNxWorld.x + vNxWorld.y * 0.73, vNxWorld.z - vNxWorld.y * 0.61) * uNoiseScale * 0.125;
+  float nxA = texture2D(uFbmTex, nxP).r;
+  float nxB = texture2D(uFbmTex, nxP * 2.9 + 0.37).r;
+  diffuseColor.rgb *= 1.0 + ((nxA * 0.6 + nxB * 0.4) - 0.5) * 1.35 * uNoiseAmt * uTexture;
 #ifdef NX_WATER
   float nxD = clamp(vNxDepth / uDeepAt, 0.0, 1.0);
   vec3 nxW = mix(uShallow, uDeep, smoothstep(0.0, 1.0, nxD));
@@ -232,8 +271,10 @@ const FRAG_EMISSIVE = /* glsl */`
 
 const FRAG_LIGHT = /* glsl */`
 {
-  float nxCl = nxFbm(vNxWorld.xz * uCloudScale + uCloudOffset);
-  outgoingLight -= reflectedLight.directDiffuse * smoothstep(0.5, 0.62, nxCl) * uCloudShadow;
+  if (uCloudShadow > 0.001) {
+    float nxCl = nxFbm(vNxWorld.xz * uCloudScale + uCloudOffset);
+    outgoingLight -= reflectedLight.directDiffuse * smoothstep(0.5, 0.62, nxCl) * uCloudShadow;
+  }
 }
 #ifdef NX_MIRROR
 {
@@ -344,7 +385,7 @@ export function toon(color = '#ffffff', o = {}) {
   }
   if (o.windows) m.defines.NX_WINDOWS = '';
   m.onBeforeCompile = nxPatch;
-  m.customProgramCacheKey = () => 'nx-toon-2';
+  m.customProgramCacheKey = () => 'nx-toon-3';
   return m;
 }
 

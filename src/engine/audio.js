@@ -210,6 +210,19 @@ const VOICES = {
     a._burst(t, 0.18, { buf: a.pink, type: 'bandpass', freq: 1600, q: 0.8, gain: 0.25, dest: a.sfxBus });
     tone(a, t + 0.05, { curve: [[700, 0], [1100, 0.08]], dur: 0.1, gain: 0.04, attack: 0.005, release: 0.06, dest: a.sfxBus });
   },
+  // a felled tree: wood creaks as it tips, then a soft thud and a rustle of leaves when it lands
+  timber(a, t, o) {
+    const land = o.land ?? 0.85;
+    tone(a, t, { type: 'sawtooth', curve: [[150, 0], [104, 0.3], [128, 0.5]], dur: 0.55, gain: 0.025, attack: 0.04, release: 0.2, dest: a.sfxBus });
+    a._burst(t + land, 0.25, { buf: a.brown, type: 'lowpass', freq: 380, gain: 0.55, dest: a.sfxBus });
+    tone(a, t + land, { curve: [[95, 0], [44, 0.22]], dur: 0.26, gain: 0.22, attack: 0.004, release: 0.22, dest: a.sfxBus });
+    a._burst(t + land + 0.02, 0.35, { buf: a.pink, type: 'bandpass', freq: 2200, q: 0.7, gain: 0.12, dest: a.sfxBus });
+  },
+  // a boulder or dune breaking up
+  crumble(a, t) {
+    a._burst(t, 0.3, { buf: a.brown, type: 'lowpass', freq: 700, gain: 0.45, dest: a.sfxBus });
+    for (let i = 0; i < 6; i++) a._burst(t + 0.04 + i * 0.045, 0.02, { freq: 1500 + Math.random() * 1500, q: 1.2, gain: 0.05, dest: a.sfxBus });
+  },
   splash(a, t) {
     a._burst(t, 0.35, { type: 'bandpass', freq: 1300, q: 0.7, gain: 0.25, dest: a.sfxBus });
     tone(a, t, { curve: [[500, 0], [1400, 0.12]], dur: 0.14, gain: 0.04, attack: 0.004, release: 0.1, dest: a.sfxBus });

@@ -207,7 +207,8 @@ export class Environment {
     this.daylight = 1 - k.night;
 
     // key light: the sun by day, the moon by night (both fade out around the swap)
-    const cover = (0.55 + 0.3 * W.rain + 0.1 * W.storm) * W.clouds;
+    // Pixel Diorama: overcast days were too gloomy on phone screens, so clouds dim the sun a bit less
+    const cover = (0.42 + 0.3 * W.rain + 0.1 * W.storm) * W.clouds;
     const sunI = k.sunI * (1 - cover) * (1 - 0.35 * W.fog);
     const moonI = 0.65 * smooth(0.55, 0.95, k.night) * (1 - 0.85 * W.clouds);
     const useSun = k.sunI > 0.02;
@@ -257,7 +258,7 @@ export class Environment {
     this._c1.lerpColors(PAL.fogDay, PAL.fogNight, k.night);
     P.fogColor.copy(P.skyBottom).lerp(this._c1, 0.75);
     P.flash = this.flash;
-    P.tint.copy(k.tint).lerp(PAL.grade, W.clouds * 0.45);
+    P.tint.copy(k.tint).lerp(PAL.grade, W.clouds * 0.25);
     P.exposure = k.exp;
     const clearSky = (1 - W.clouds * 0.9) * (1 - W.fog);
     P.milky = (this.sky.milky || 0) * k.stars * clearSky;

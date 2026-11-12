@@ -75,7 +75,7 @@ export class CameraControl {
 
   _clampTarget() {
     const t = this.goal.target;
-    const lim = HALF + 1;
+    const lim = this.bounds ?? HALF + 1;
     t.x = clamp(t.x, -lim, lim);
     t.z = clamp(t.z, -lim, lim);
   }

@@ -5,6 +5,7 @@ import { PixelEngine } from '../engine/pixel-engine.js';
 import { Environment } from '../engine/environment.js';
 import { buildingModel, disposeModel, Builder } from '../game/models.js';
 import { BUILDINGS } from '../game/data.js';
+import { FURNITURE, furnitureModel, footprintOf, CELL } from '../game/furniture.js';
 
 const SIZE = 120;
 const cache = new Map();
@@ -29,7 +30,44 @@ function setup() {
   env.setWeather('clear', true);
 }
 
+function renderFurni(id) {
+  if (!eng) setup();
+  const def = FURNITURE[id];
+  const group = new THREE.Group();
+  const model = furnitureModel(id, 1);
+  group.add(model);
+  const [fw, fd] = footprintOf(id, 0);
+  const b = new Builder();
+  const w = Math.max(fw, 1) * CELL + 0.12, d = Math.max(fd, 1) * CELL + 0.12;
+  if (def.wall) {
+    // a piece of wall to hang it on
+    b.box(w, 0.9, 0.06, '#e9dcc4', 0, 0.12, -0.03, {}, 'solid');
+    b.box(w, 0.06, 0.3, '#b07e52', 0, 0.06, 0.12, {}, 'rough');
+  } else b.box(w, 0.06, d, '#b07e52', 0, -0.06, 0, {}, 'rough');
+  group.add(b.build());
+  scene.add(group);
+  const box = new THREE.Box3().setFromObject(model);
+  const h = box.max.y - Math.min(0, box.min.y);
+  const span = Math.max(w, d);
+  eng.view.target.set(0, def.wall ? (box.min.y + box.max.y) / 2 : Math.min(h * 0.45, 0.5), 0);
+  eng.view.size = Math.max(span * 1.15, h * 1.35, 0.6);
+  eng.view.azimuth = def.wall ? 18 : 35;
+  eng.view.elevation = def.wall ? 12 : 30;
+  eng.view.snap = false;
+  env.update(0.016);
+  env.post.skyTop.set('#20284a');
+  env.post.skyBottom.set('#20284a');
+  env.post.stars = 0;
+  eng.prepareScene(scene);
+  eng.render(scene, env);
+  const url = eng.canvas.toDataURL('image/png');
+  scene.remove(group);
+  disposeModel(group);
+  return url;
+}
+
 function render(type, biome, paint) {
+  if (type.startsWith('furn:')) return renderFurni(type.slice(5));
   if (!eng) setup();
   const def = BUILDINGS[type];
   const group = new THREE.Group();
@@ -57,6 +95,11 @@ function render(type, biome, paint) {
   scene.remove(group);
   disposeModel(group);
   return url;
+}
+
+/** Furniture thumbnail (cached data URL or null; cb(url) when ready). */
+export function thumbFurni(id, cb) {
+  return thumb('furn:' + id, 'furn', 0, cb);
 }
 
 /** Returns a cached data URL or null (and schedules rendering). cb(url) fires when ready. */

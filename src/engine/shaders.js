@@ -101,24 +101,23 @@ float bayer(ivec2 p) {
   return (m[(p.y & 3) * 4 + (p.x & 3)] + 0.5) / 16.0;
 }
 // Outline on the nearer pixel wherever a neighbour is much farther away.
-float depthEdge(ivec2 p, float d) {
-  float s = max(depthAt(p + ivec2(1, 0)) - d, 0.0) + max(depthAt(p - ivec2(1, 0)) - d, 0.0)
-          + max(depthAt(p + ivec2(0, 1)) - d, 0.0) + max(depthAt(p - ivec2(0, 1)) - d, 0.0);
-  s *= uDepthRange;
+// The four neighbour depths are fetched once and shared with the highlight test (cheaper on mobile GPUs).
+float depthEdge(vec4 nd, float d) {
+  float s = dot(max(nd - d, 0.0), vec4(1.0)) * uDepthRange;
   return floor(smoothstep(uEdge, uEdge * 2.0, s) * 2.0) / 2.0;
 }
 // Highlight on convex creases (roof ridges, terrace lips), only on the shallower side.
-float normalEdgeOne(ivec2 q, float d, vec3 n) {
+float normalEdgeOne(ivec2 q, float qd, float d, vec3 n) {
   vec4 m = normalAt(q);
   if (m.a < 0.5) return 0.0;
-  float dd = (depthAt(q) - d) * uDepthRange;
+  float dd = (qd - d) * uDepthRange;
   float ni = smoothstep(-0.01, 0.01, dot(n - m.xyz, vec3(1.0)));
   float di = step(-0.02, dd);
   return (1.0 - dot(n, m.xyz)) * di * ni;
 }
-float normalEdge(ivec2 p, float d, vec3 n) {
-  float s = normalEdgeOne(p + ivec2(1, 0), d, n) + normalEdgeOne(p - ivec2(1, 0), d, n)
-          + normalEdgeOne(p + ivec2(0, 1), d, n) + normalEdgeOne(p - ivec2(0, 1), d, n);
+float normalEdge(ivec2 p, vec4 nd, float d, vec3 n) {
+  float s = normalEdgeOne(p + ivec2(1, 0), nd.x, d, n) + normalEdgeOne(p - ivec2(1, 0), nd.y, d, n)
+          + normalEdgeOne(p + ivec2(0, 1), nd.z, d, n) + normalEdgeOne(p - ivec2(0, 1), nd.w, d, n);
   return step(0.1, s);
 }
 vec3 toSRGB(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
@@ -204,10 +203,14 @@ void main() {
     // effects (snow, smoke, sparks, fireworks) drawn over empty sky keep their colour
     c = sky(uv, p) * (1.0 - clamp(sc.a, 0.0, 1.0)) + sc.rgb;
   } else {
-    vec4 n = normalAt(p);
-    float de = uOutline > 0.0 ? depthEdge(p, d) : 0.0;
-    float ne = (uHighlight > 0.0 && n.a > 0.5) ? normalEdge(p, d, n.xyz) : 0.0;
-    c *= de > 0.0 ? (1.0 - uOutline * de) : (1.0 + uHighlight * ne);
+    vec4 nd = vec4(depthAt(p + ivec2(1, 0)), depthAt(p - ivec2(1, 0)), depthAt(p + ivec2(0, 1)), depthAt(p - ivec2(0, 1)));
+    float de = uOutline > 0.0 ? depthEdge(nd, d) : 0.0;
+    if (de > 0.0) {
+      c *= 1.0 - uOutline * de;
+    } else if (uHighlight > 0.0) {
+      vec4 n = normalAt(p);
+      if (n.a > 0.5) c *= 1.0 + uHighlight * normalEdge(p, nd, d, n.xyz);
+    }
   }
   c += uBloom * (texture(tBloomA, uv).rgb + texture(tBloomB, uv).rgb * 0.85);
   c = mix(c, uFogColor, uFog * (bg ? 0.85 : (0.16 + 0.62 * uv.y)));

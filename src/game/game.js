@@ -2,11 +2,12 @@
 // quests, achievements, random events, daily rewards and offline progress. No rendering here.
 import {
   RES, RES_KEYS, BIOMES, BIOME_KEYS, BUILDINGS, MAX_LEVEL, upgradeCost, RECIPES, TOOL_TIERS, NODES, FIRST_NAMES, TRAITS,
-  QUESTS, ACHIEVEMENTS, EVENTS, xpForLevel, MAX_PLAYER_LEVEL, DAILY_REWARDS, START, PAINTS,
+  QUESTS, ACHIEVEMENTS, EVENTS, EVENT_BY_ID, xpForLevel, MAX_PLAYER_LEVEL, DAILY_REWARDS, START, PAINTS,
 } from './data.js';
 import { N, idx, inside, generateIsland, packIsland, unpackIsland, WALKABLE, ROADS, STEP } from './island.js';
 import { randomLook } from './people.js';
 import { rng } from '../engine/kit.js';
+import { FURNITURE, WALLPAPERS, FLOORS, homeStats, defaultFurniture, ENTERABLE } from './furniture.js';
 
 export const SAVE_VERSION = 1;
 export const SECONDS_PER_GAME_HOUR = 30; // a full day takes 12 real minutes at 1x
@@ -15,6 +16,8 @@ const OFFLINE_EFF = 0.4;
 const WALKABLE_BUILDINGS = new Set(['ladang', 'taman', 'pasar']);
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const NO_FX = Object.freeze({});
+const NIGHT_SALE = (h) => h >= 18 || h < 5;
 const todayStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function footprint(rec) {
@@ -51,7 +54,7 @@ export class Game {
       created: Date.now(),
       saved: Date.now(),
       seed,
-      player: { name: 'Kepala Desa', level: 1, xp: 0, coins: START.coins, tool: 0 },
+      player: { name: 'Mayor', level: 1, xp: 0, coins: START.coins, tool: 0 },
       res: Object.fromEntries(RES_KEYS.map((k) => [k, START.res[k] || 0])),
       stats: { built: 0, gathered: 0, crafted: 0, sold: 0, talked: 0, gifts: 0, quests: 0, events: 0, chests: 0, cats: 0, landmarks: 0, days: 0, essence: 0, upgrades: 0 },
       quests: { done: [], base: {} },
@@ -68,6 +71,8 @@ export class Game {
       settings: { sound: true, music: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true },
       tips: 0,
       tutorial: 0,
+      furn: {}, // furniture in storage: id -> count
+      finishes: { wall: [0], floor: [0] }, // wallpapers and floors the player owns
     };
     this.s.islands.desa = generateIsland('desa', seed);
     const I = this.s.islands.desa;
@@ -86,7 +91,7 @@ export class Game {
 
   load(json) {
     const d = typeof json === 'string' ? JSON.parse(json) : json;
-    if (!d || !d.v || !d.islands) throw new Error('save tidak valid');
+    if (!d || !d.v || !d.islands) throw new Error('invalid save');
     // fill in anything newer versions added
     const base = (() => {
       const g = new Game();
@@ -103,6 +108,16 @@ export class Game {
     d.weather = d.weather || {};
     d.daily = d.daily || base.daily;
     d.ach = d.ach || {};
+    d.furn = d.furn || {};
+    d.finishes = d.finishes || { wall: [0], floor: [0] };
+    // events: drop ones this version does not know, fill fields older saves lack
+    if (d.event && (!EVENT_BY_ID[d.event.id] || !d.islands[d.event.island])) d.event = null;
+    if (d.event) {
+      d.event.start ??= d.event.until - EVENT_BY_ID[d.event.id].hours;
+      d.event.gain ||= {};
+      d.event.got ||= {};
+    }
+    d.eventCd = d.eventCd ?? 0;
     for (const k of Object.keys(d.islands)) d.islands[k] = unpackIsland(d.islands[k]);
     if (!d.islands[d.current]) d.current = 'desa';
     this.s = d;
@@ -267,7 +282,7 @@ export class Game {
     const out = [];
     for (const [k, v] of Object.entries(cost || {})) {
       const have = k === 'coins' ? this.s.player.coins : this.s.res[k] || 0;
-      if (have < v) out.push(`${k === 'coins' ? 'Koin' : RES[k]?.name || k} ${v - have}`);
+      if (have < v) out.push(`${k === 'coins' ? 'Coins' : RES[k]?.name || k} ${v - have}`);
     }
     return out;
   }
@@ -339,26 +354,26 @@ export class Game {
 
   canPlace(type, i, j, I = this.I) {
     const def = BUILDINGS[type];
-    if (!def) return { ok: false, reason: 'Tidak dikenal' };
-    if (!this.isUnlocked(type)) return { ok: false, reason: `Terbuka di level ${def.unlock}` };
-    if (!this.biomeAllows(type)) return { ok: false, reason: 'Tidak cocok untuk pulau ini' };
-    if (def.limit && this.countType(type, I) >= def.limit) return { ok: false, reason: 'Hanya boleh satu di pulau ini' };
+    if (!def) return { ok: false, reason: 'Unknown building' };
+    if (!this.isUnlocked(type)) return { ok: false, reason: `Unlocks at level ${def.unlock}` };
+    if (!this.biomeAllows(type)) return { ok: false, reason: "Can't be built on this island" };
+    if (def.limit && this.countType(type, I) >= def.limit) return { ok: false, reason: 'Only one per island' };
     const s = def.size;
     let hMax = -99, hMin = 99;
     for (let a = 0; a < s; a++)
       for (let b = 0; b < s; b++) {
         const ii = i + a, jj = j + b;
-        if (!inside(ii, jj)) return { ok: false, reason: 'Di luar pulau' };
+        if (!inside(ii, jj)) return { ok: false, reason: 'Outside the island' };
         const k = idx(ii, jj);
-        if (I.t[k] === 'w') return { ok: false, reason: 'Tidak bisa di atas air' };
-        if (this.occ[k]) return { ok: false, reason: 'Petak sudah terisi' };
-        if (I.npcBlock?.has?.(k)) return { ok: false, reason: 'Ada sesuatu di sini' };
+        if (I.t[k] === 'w') return { ok: false, reason: "Can't build on water" };
+        if (this.occ[k]) return { ok: false, reason: 'This spot is taken' };
+        if (I.npcBlock?.has?.(k)) return { ok: false, reason: 'Something is in the way' };
         hMax = Math.max(hMax, I.h[k]);
         hMin = Math.min(hMin, I.h[k]);
       }
-    if (hMax - hMin > 0.75) return { ok: false, reason: 'Tanah terlalu curam' };
-    if (def.needWater && !this.nearWater(i, j, s, I)) return { ok: false, reason: 'Harus di tepi air' };
-    if (!this.has(def.cost)) return { ok: false, reason: 'Kurang: ' + this.missing(def.cost).join(', '), cost: true };
+    if (hMax - hMin > 0.75) return { ok: false, reason: 'Ground is too steep' };
+    if (def.needWater && !this.nearWater(i, j, s, I)) return { ok: false, reason: 'Must be next to water' };
+    if (!this.has(def.cost)) return { ok: false, reason: 'Need: ' + this.missing(def.cost).join(', '), cost: true };
     return { ok: true };
   }
 
@@ -407,6 +422,14 @@ export class Game {
     I.buildings.push(rec);
     for (const [ii, jj] of footprint(rec)) this.occ[idx(ii, jj)] = rec.id;
     this.give(gained, { silent: true });
+    // Building Boom: the builders hand back part of the materials
+    const refund = this.evFx().refund;
+    if (refund) {
+      const back = {};
+      for (const [k, v] of Object.entries(def.cost)) if (k !== 'coins' && v * refund >= 1) back[k] = Math.floor(v * refund);
+      const got = this.give(back, { silent: true });
+      if (Object.keys(got).length) this.emit('toast', { text: `Builders refunded ${Object.entries(got).map(([k, v]) => `${v} ${RES[k].name}`).join(', ')}`, icon: 'build' });
+    }
     this.s.stats.built++;
     if (def.landmark) this.s.stats.landmarks++;
     this.addXp(5 + Math.round((def.cost.coins || 0) / 10));
@@ -430,9 +453,9 @@ export class Game {
 
   upgrade(rec) {
     const def = BUILDINGS[rec.type];
-    if (rec.level >= MAX_LEVEL || def.fixed || def.small) return { ok: false, reason: 'Sudah maksimal' };
+    if (rec.level >= MAX_LEVEL || def.fixed || def.small) return { ok: false, reason: 'Already at max level' };
     const cost = upgradeCost(def, rec.level);
-    if (!this.pay(cost)) return { ok: false, reason: 'Kurang: ' + this.missing(cost).join(', ') };
+    if (!this.pay(cost)) return { ok: false, reason: 'Need: ' + this.missing(cost).join(', ') };
     rec.level++;
     this.s.stats.upgrades++;
     this.addXp(15 * rec.level);
@@ -458,7 +481,7 @@ export class Game {
 
   demolish(rec) {
     const def = BUILDINGS[rec.type];
-    if (def.fixed) return { ok: false, reason: 'Tidak bisa dibongkar' };
+    if (def.fixed) return { ok: false, reason: "Can't be demolished" };
     const I = this.I;
     I.buildings = I.buildings.filter((b) => b !== rec);
     for (const [i, j] of footprint(rec)) this.occ[idx(i, j)] = 0;
@@ -483,7 +506,7 @@ export class Game {
     if (on) {
       if (ROADS.has(I.t[k])) return false;
       if (!this.pay({ stone: 1 })) {
-        this.emit('toast', { text: 'Butuh 1 batu per petak jalan', kind: 'warn' });
+        this.emit('toast', { text: 'Each road tile costs 1 stone', kind: 'warn' });
         return false;
       }
       I.t[k] = road;
@@ -515,7 +538,8 @@ export class Game {
     if (!n || n.hp === 0) return null;
     const def = NODES[n.k];
     if (n.hp < 0) n.hp = def.hp;
-    const y = TOOL_TIERS[this.s.player.tool].yield;
+    let y = TOOL_TIERS[this.s.player.tool].yield;
+    if (this.isRested()) y += 1;
     const items = { [def.res]: y };
     if (def.bonus && this.rand() < 0.35) Object.assign(items, def.bonus);
     if (this.rand() < 0.04) items.coins = 5 + Math.floor(this.rand() * 15);
@@ -584,24 +608,130 @@ export class Game {
   npcTick(p, ctx, dtH) {
     const tr = this.traitOf(p);
     const N2 = p.need;
-    N2.food = clamp(N2.food - dtH * 4.2 * (tr.hunger || 1), 0, 100);
-    if (ctx.sleeping) N2.energy = clamp(N2.energy + dtH * 13, 0, 100);
-    else N2.energy = clamp(N2.energy - dtH * (ctx.working ? 4 : 2.5), 0, 100);
-    if (ctx.leisure) N2.fun = clamp(N2.fun + dtH * (ctx.festival ? 30 : 14) * (tr.social || 1), 0, 100);
+    const fx = this.evFx();
+    const evNow = this.eventHere();
+    const sick = !!evNow?.sick?.includes(p.id);
+    N2.food = clamp(N2.food - dtH * 4.2 * (tr.hunger || 1) * (fx.hunger || 1), 0, 100);
+    if (ctx.sleeping) N2.energy = clamp(N2.energy + dtH * 13 * (fx.sleep || 1) * (sick ? 0.6 : 1), 0, 100);
+    else N2.energy = clamp(N2.energy - dtH * (ctx.working ? 4 : 2.5) * (fx.energy || 1) * (sick ? 1.8 : 1), 0, 100);
+    if (ctx.leisure) N2.fun = clamp(N2.fun + dtH * (ctx.festival ? 30 : 14 * (fx.fun || 1)) * (tr.social || 1), 0, 100);
     else if (!ctx.sleeping) N2.fun = clamp(N2.fun - dtH * 2.2, 0, 100);
     const home = p.home ? this.buildingById(p.home) : null;
     let env = 10;
     if (home) {
       const k = idx(home.i, home.j);
       env = 42 + 8 * ((home.level || 1) - 1) + Math.min(40, this.happyMap ? this.happyMap[k] : 0);
+      // a cosy, well furnished home lifts the mood; not enough beds does the opposite
+      const hs = this.homeStatsOf(home);
+      env += Math.min(18, hs.comfort * 0.45);
+      if (hs.sleeps < this.residentsOf(home)) env -= 8;
     }
     const job = p.job ? 8 : this.I.npcs.length < 3 ? 4 : -6;
-    const ev = this.s.event?.id === 'festival' ? 10 : this.s.event?.id === 'storm' ? -6 : 0;
+    let ev = fx.mood || 0;
+    if (evNow) {
+      if (sick) ev -= 8;
+      if (fx.burnWood && evNow.warm !== undefined) ev += evNow.warm ? 5 : -8;
+      if (evNow.npc === p.id) ev += 10;
+    }
     const target = clamp(0.28 * N2.food + 0.14 * N2.energy + 0.22 * N2.fun + 0.36 * env + job + ev, 0, 100);
     p.mood += (target - p.mood) * (1 - Math.exp(-dtH * 0.45 * (tr.mood || 1)));
     p.mood = clamp(p.mood, 0, 100);
     if (!home) p.homeless = (p.homeless || 0) + dtH;
     else p.homeless = 0;
+  }
+
+  // ---------------------------------------------------------------- homes, furniture, sleep
+
+  residentsOf(rec, I = this.I) {
+    return I.npcs.reduce((a, p) => a + (p.home === rec.id ? 1 : 0), 0);
+  }
+
+  /** Comfort, beds etc. of a home (a never-visited home counts with its starter furniture). */
+  homeStatsOf(rec) {
+    this._hs ||= new WeakMap();
+    let s = this._hs.get(rec);
+    if (!s) {
+      const furni = rec.furni || (ENTERABLE.has(rec.type) ? defaultFurniture(rec, rec.type === 'balai' ? 1 : this.housingOf(rec)) : []);
+      s = homeStats(furni);
+      this._hs.set(rec, s);
+    }
+    return s;
+  }
+  markFurni(rec) {
+    this._hs?.delete(rec);
+    this.emit('furni', rec);
+  }
+
+  furniUnlocked(id) {
+    return (FURNITURE[id]?.unlock || 1) <= this.s.player.level;
+  }
+  buyFurni(id) {
+    const d = FURNITURE[id];
+    if (!d) return { ok: false, reason: 'Unknown item' };
+    if (!this.furniUnlocked(id)) return { ok: false, reason: `Unlocks at level ${d.unlock}` };
+    if (!this.pay(d.cost)) return { ok: false, reason: 'Need: ' + this.missing(d.cost).join(', ') };
+    this.s.stats.furniture = (this.s.stats.furniture || 0) + 1;
+    this.addXp(2 + Math.round((d.comfort || 0) * 1.5));
+    return { ok: true };
+  }
+  storeFurni(id) {
+    this.s.furn[id] = (this.s.furn[id] || 0) + 1;
+  }
+  takeFurni(id) {
+    if (!this.s.furn[id]) return false;
+    if (--this.s.furn[id] <= 0) delete this.s.furn[id];
+    return true;
+  }
+  /** Selling gives half the coins back (materials are gone). */
+  sellFurni(id) {
+    const coins = Math.floor((FURNITURE[id]?.cost?.coins || 0) * 0.5);
+    this.give({ coins }, { silent: true });
+    return coins;
+  }
+
+  /** Wallpaper / floor: buy once, then switch freely. kind: 'wall' | 'floor' */
+  setFinish(rec, kind, i) {
+    const list = kind === 'wall' ? WALLPAPERS : FLOORS;
+    const def = list[i];
+    if (!def) return { ok: false };
+    const owned = this.s.finishes[kind];
+    if (!owned.includes(i)) {
+      if (!this.pay(def.cost)) return { ok: false, reason: 'Need: ' + this.missing(def.cost).join(', ') };
+      owned.push(i);
+      this.addXp(5);
+    }
+    rec[kind] = i;
+    this.markFurni(rec);
+    return { ok: true };
+  }
+
+  /** The Mayor's rest buff after a night in bed: +1 per swing while gathering. */
+  isRested() {
+    return (this.s.player.rested || 0) > this.absHour();
+  }
+  canSleep() {
+    const h = this.s.time.hour;
+    return h >= 20 || h < 5;
+  }
+  /**
+   * Sleep through the night: the clock runs on to 06:30 in quarter-hour steps (hourly rules,
+   * production, the new day all happen as usual) while every villager sleeps. Returns hours slept.
+   */
+  sleepUntilMorning(wake = 6.5) {
+    const T = this.s.time;
+    let hours = (wake - T.hour + 24) % 24;
+    if (hours > 12) hours = 0;
+    const slept = hours;
+    const quiet = new Map();
+    while (hours > 0.001) {
+      const step = Math.min(0.25, hours);
+      this.tick(step, quiet);
+      for (const p of this.I.npcs) this.npcTick(p, { sleeping: true }, step);
+      hours -= step;
+    }
+    this.s.player.rested = this.absHour() + 4;
+    this.s.stats.nights = (this.s.stats.nights || 0) + 1;
+    return slept;
   }
 
   /** NPC eats one meal from the shared stores. */
@@ -632,19 +762,20 @@ export class Game {
   }
 
   giftNpc(p) {
-    if (!this.pay({ food: 5 })) return { ok: false, reason: 'Butuh 5 makanan' };
+    if (!this.pay({ food: 5 })) return { ok: false, reason: 'Need 5 food' };
     p.friend = clamp((p.friend || 0) + 12, 0, 100);
     p.need.food = clamp(p.need.food + 30, 0, 100);
     p.mood = clamp(p.mood + 8, 0, 100);
     this.s.stats.gifts++;
     this.addXp(5);
+    this._eventGift(p);
     return { ok: true };
   }
 
   fulfilRequest(p) {
     const r = p.req;
     if (!r) return { ok: false };
-    if (!this.pay({ [r.res]: r.n })) return { ok: false, reason: `Butuh ${r.n} ${RES[r.res].name}` };
+    if (!this.pay({ [r.res]: r.n })) return { ok: false, reason: `Need ${r.n} ${RES[r.res].name}` };
     p.req = null;
     p.friend = clamp((p.friend || 0) + 15, 0, 100);
     p.mood = clamp(p.mood + 12, 0, 100);
@@ -676,14 +807,21 @@ export class Game {
   }
 
   multipliers(res) {
-    let m = 1;
-    const ev = this.s.event?.island === this.biome ? this.s.event.id : null;
-    if (ev === 'harvest' && res === 'food') m *= 2;
-    if (ev === 'pest' && res === 'food') m *= 0.5;
-    if (ev === 'storm') m *= 0.7;
-    if (ev === 'inspire') m *= 1.25;
+    return this.eventMult(res) * this.baseMult(res);
+  }
+  baseMult(res) {
     const bonus = BIOMES[this.biome].bonus || {};
-    if (bonus[res]) m *= bonus[res];
+    return bonus[res] || 1;
+  }
+  /** Production multiplier from the running event on this island (res: resource key or 'coin'). */
+  eventMult(res) {
+    const ev = this.eventHere();
+    if (!ev) return 1;
+    const fx = EVENT_BY_ID[ev.id]?.fx || NO_FX;
+    let m = 1;
+    if (fx.mult) m *= (fx.mult[res] ?? 1) * (fx.mult.all ?? 1);
+    if (ev.id === 'bees' && res === 'food') m *= Math.max(0.4, 1 - 0.15 * this.propsLeft(ev));
+    if (ev.sick?.length) m *= 1 - 0.4 * Math.min(1, ev.sick.length / Math.max(1, this.I.npcs.length));
     return m;
   }
 
@@ -713,6 +851,8 @@ export class Game {
     const I = this.I;
     const mood = this.islandHappiness();
     const moodK = 0.7 + mood / 200;
+    const ev = this.eventHere();
+    const fx = ev ? EVENT_BY_ID[ev.id]?.fx || NO_FX : NO_FX;
     for (const b of I.buildings) {
       const def = BUILDINGS[b.type];
       if (!b.built) continue;
@@ -724,8 +864,14 @@ export class Game {
         let k = workers * lvl * moodK * dtH;
         if (def.nearNode) k *= this.nodeBonus(b, def.nearNode);
         if (b.type === 'ladang') k *= this.windmillBoost(b);
+        const tm = fx.type?.[b.type] ?? 1;
         for (const [r, rate] of Object.entries(def.produce)) {
-          b.acc[r] = (b.acc[r] || 0) + rate * k * this.multipliers(r === 'coins' ? 'coin' : r);
+          const rk = r === 'coins' ? 'coin' : r;
+          const base = rate * k * this.baseMult(rk);
+          const em = ev ? this.eventMult(rk) * tm : 1;
+          b.acc[r] = (b.acc[r] || 0) + base * em;
+          // what the event added, for the summary when it ends
+          if (em > 1) ev.gain[r] = (ev.gain[r] || 0) + base * (em - 1);
           if (b.acc[r] >= 1) {
             const n = Math.floor(b.acc[r]);
             b.acc[r] -= n;
@@ -737,7 +883,10 @@ export class Game {
       if (def.housing) {
         const residents = I.npcs.filter((p) => p.home === b.id).length;
         if (residents) {
-          b.tax = (b.tax || 0) + residents * def.tax * 0.3 * moodK * dtH * this.multipliers('coin');
+          const em = this.eventMult('coin') * (fx.tax ?? 1);
+          const base = residents * def.tax * 0.3 * moodK * dtH * this.baseMult('coin');
+          b.tax = (b.tax || 0) + base * em;
+          if (em > 1) ev.gain.coins = (ev.gain.coins || 0) + base * (em - 1);
           if (b.tax >= 6) {
             const n = Math.floor(b.tax);
             b.tax -= n;
@@ -761,20 +910,20 @@ export class Game {
     const happy = this.islandHappiness();
     const free = this.housingCap() - I.npcs.length;
     if (free > 0 && h >= 7 && h <= 19 && happy >= 35 && this.s.res.food > 0) {
-      const chance = 0.3 + happy / 220;
+      const chance = (0.3 + happy / 220) * (this.evFx().arrivals || 1);
       if (Math.random() < chance) {
         const p = this.spawnNpc(I);
         p.arriving = 1;
         this.addXp(6);
         this.emit('npc:add', p);
-        this.emit('toast', { text: `${p.name} pindah ke ${BIOMES[this.biome].short}!`, icon: 'pop' });
+        this.emit('toast', { text: `${p.name} moved to ${BIOMES[this.biome].short}!`, icon: 'pop' });
       }
     }
     // unhappy or homeless residents may leave
     for (const p of [...I.npcs]) {
       if ((p.homeless > 16 && I.npcs.length > 2) || (p.mood < 15 && Math.random() < 0.04)) {
         this.removeNpc(I, p);
-        this.emit('toast', { text: `${p.name} meninggalkan pulau...`, kind: 'warn', icon: 'sad' });
+        this.emit('toast', { text: `${p.name} left the island...`, kind: 'warn', icon: 'sad' });
       }
     }
     // a resident asks for something now and then
@@ -796,6 +945,7 @@ export class Game {
     // market prices drift back
     for (const k of RES_KEYS) this.s.market[k] += (1 - this.s.market[k]) * 0.05;
     // events
+    this.eventHourly();
     this.updateEvent();
     this.assignJobs(I);
     this.refreshQuests();
@@ -805,7 +955,8 @@ export class Game {
     const B = BIOMES[this.biome];
     const ev = this.s.event;
     let name;
-    if (ev && ev.id === 'storm' && ev.island === this.biome) name = 'storm';
+    const forced = ev && ev.island === this.biome ? EVENT_BY_ID[ev.id]?.fx?.weather : null;
+    if (forced) name = forced;
     else {
       const entries = Object.entries(B.weather);
       const total = entries.reduce((a, [, w]) => a + w, 0);
@@ -828,30 +979,63 @@ export class Game {
 
   // ---------------------------------------------------------------- random events
 
+  /** The running event, if it is on the island being simulated. */
+  eventHere() {
+    const ev = this.s.event;
+    return ev && ev.island === this.biome ? ev : null;
+  }
+  /** The running event's simulation hooks on this island (an empty object when there are none). */
+  evFx() {
+    const ev = this.eventHere();
+    return (ev && EVENT_BY_ID[ev.id]?.fx) || NO_FX;
+  }
+  buildSpeed() {
+    return this.evFx().build || 1;
+  }
+  /** Pose ('dance' | 'wave') when villagers should gather at the plaza at hour h, else null. */
+  eventGather(h) {
+    const ev = this.eventHere();
+    const fx = ev && EVENT_BY_ID[ev.id]?.fx;
+    if (!fx?.gather) return null;
+    if (fx.gatherFor && this.absHour() - (ev.start ?? 0) > fx.gatherFor) return null;
+    return h >= fx.gather[0] && h < fx.gather[1] ? fx.pose || 'dance' : null;
+  }
+  propsLeft(ev = this.s.event) {
+    if (!ev?.props) return 0;
+    let n = 0;
+    for (const p of ev.props) if (!p.done) n++;
+    return n;
+  }
+
+  eventEligible(e) {
+    const h = this.s.time.hour;
+    const night = h < 5.5 || h > 20;
+    const I = this.I, w = this.weatherName();
+    if (e.minLevel && this.s.player.level < e.minLevel) return false;
+    if (e.minPop && I.npcs.length < e.minPop) return false;
+    if (e.night !== undefined && e.night !== night) return false;
+    if (e.start) {
+      const [a, b] = e.start;
+      if (a <= b ? h < a || h >= b : h < a && h >= b) return false;
+    }
+    if (e.biomes && !e.biomes.includes(this.biome)) return false;
+    if (e.notBiomes && e.notBiomes.includes(this.biome)) return false;
+    if (e.weatherIn && !e.weatherIn.includes(w)) return false;
+    if (e.notWeather && e.notWeather.includes(w)) return false;
+    if (e.needs && !I.buildings.some((b) => b.type === e.needs && b.built)) return false;
+    return e.id !== this.s.lastEvent; // never the same one twice in a row
+  }
+
   updateEvent() {
     const now = this.absHour();
     const ev = this.s.event;
     if (ev && now >= ev.until) {
-      this.emit('event:end', ev);
-      this.s.event = null;
-      this.s.eventCd = now + 3 + Math.random() * 4;
-      const I = this.s.islands[ev.island];
-      if (I) {
-        I.chest = null;
-        I.cat = null;
-        I.visitor = null;
-      }
-      if (ev.id === 'storm') this.rollWeather();
+      this.endEvent('time');
       return;
     }
     if (ev || now < (this.s.eventCd || 0)) return;
-    if (Math.random() > 0.3) return;
-    const h = this.s.time.hour;
-    const night = h < 5.5 || h > 20;
-    const pop = this.I.npcs.length;
-    const eligible = EVENTS.filter(
-      (e) => (!e.minLevel || this.s.player.level >= e.minLevel) && (!e.minPop || pop >= e.minPop) && (e.night === undefined || e.night === night) && (!e.notBiomes || !e.notBiomes.includes(this.biome)),
-    );
+    if (Math.random() > 0.35) return;
+    const eligible = EVENTS.filter((e) => this.eventEligible(e));
     if (!eligible.length) return;
     const total = eligible.reduce((a, e) => a + e.weight, 0);
     let r = Math.random() * total;
@@ -866,11 +1050,18 @@ export class Game {
     this.startEvent(pick.id);
   }
 
+  /**
+   * Start an event on the current island (any running event ends first). Conditions are not
+   * checked here, so this also works for testing: window.__pd.game.startEvent('lantern').
+   */
   startEvent(id) {
-    const e = EVENTS.find((x) => x.id === id);
+    const e = EVENT_BY_ID[id];
+    if (!e) return null;
+    if (this.s.event) this.endEvent('replaced');
     const now = this.absHour();
-    this.s.event = { id, until: now + e.hours, island: this.biome };
+    const ev = (this.s.event = { id, until: now + e.hours, island: this.biome, start: now, gain: {}, got: {} });
     this.s.stats.events++;
+    this.s.lastEvent = id;
     const I = this.I;
     if (id === 'chest') I.chest = this.randomFreeTile();
     if (id === 'cat') I.cat = this.randomFreeTile();
@@ -883,8 +1074,261 @@ export class Game {
       }
       this.emit('nodes');
     }
-    if (id === 'storm') this.rollWeather();
-    this.emit('event:start', { ...this.s.event, def: e });
+    if (id === 'harvestmoon') {
+      let n = 0;
+      for (const nd of Object.values(I.nodes))
+        if (nd.k === 'bush' && nd.hp === 0) {
+          nd.hp = -1;
+          nd.fresh = 1;
+          n++;
+        }
+      if (n) {
+        this.computeHappyMap();
+        this.emit('nodes');
+      }
+    }
+    if (e.props) {
+      ev.props = [];
+      ev.pid = 1;
+      ev.found = 0;
+      for (let n = 0; n < e.props.n; n++) this._spawnProp(ev, e.props.kind);
+    }
+    if (e.host) ev.host = { k: e.host, met: 0 };
+    if (e.npc === 'birthday' && I.npcs.length) ev.npc = I.npcs[Math.floor(Math.random() * I.npcs.length)].id;
+    if (e.npc === 'sick' && I.npcs.length) {
+      const ids = I.npcs.map((p) => p.id);
+      for (let k = ids.length - 1; k > 0; k--) {
+        const r = Math.floor(Math.random() * (k + 1));
+        [ids[k], ids[r]] = [ids[r], ids[k]];
+      }
+      ev.sick = ids.slice(0, Math.max(1, Math.ceil(ids.length * 0.4)));
+      ev.total = ev.sick.length;
+      ev.cured = 0;
+    }
+    if (e.fx?.weather) this.rollWeather();
+    this.emit('event:start', { ...ev, def: e });
+    return ev;
+  }
+
+  /** End the running event: clears its props, restores the weather and reports a summary. */
+  endEvent(reason = 'time') {
+    const ev = this.s.event;
+    if (!ev) return null;
+    const def = EVENT_BY_ID[ev.id];
+    const summary = this._eventSummary(ev, def, reason);
+    this.s.event = null;
+    this.s.eventCd = this.absHour() + 2.5 + Math.random() * 3;
+    const I = this.s.islands[ev.island];
+    if (I) {
+      I.chest = null;
+      I.cat = null;
+      I.visitor = null;
+    }
+    if (def?.fx?.weather) {
+      if (ev.island === this.biome) this.rollWeather();
+      else delete this.s.weather[ev.island];
+    }
+    this.emit('event:end', { ...ev, def, reason, summary });
+    return summary;
+  }
+
+  _eventSummary(ev, def, reason) {
+    const lines = [];
+    let reward = null, title = null, big = false;
+    const lvl = this.s.player.level;
+    const I = this.s.islands[ev.island];
+    if (def?.prize && reason !== 'replaced') {
+      if (ev.id === 'fishing') {
+        const fish = Math.round(ev.gain.food || 0);
+        reward = this._grant(ev, { coins: 60 + lvl * 12 + fish * 3, xp: 30 + Math.round(fish / 2) });
+        title = 'Tournament Results';
+        lines.push(fish ? `Your fishers landed ${fish} extra food and won the cup!` : 'Nobody caught much, but there is a prize for taking part.');
+        big = true;
+      } else if (ev.id === 'royal' && I) {
+        const h = Math.round(this.islandHappiness(I));
+        if (h >= 60) {
+          reward = this._grant(ev, { coins: 300 + lvl * 40, xp: 120 + lvl * 5, crystal: 3 });
+          title = 'Royal Approval!';
+          lines.push(`Happiness was ${h}%. The royal leaves a generous gift.`);
+        } else {
+          reward = this._grant(ev, { coins: 40 + lvl * 5 });
+          title = 'The Royal Departs';
+          lines.push(`Happiness was only ${h}%. Maybe next time!`);
+        }
+        big = true;
+      }
+    }
+    if (ev.props?.length) lines.push(reason === 'done' ? `Found all ${ev.props.length}!` : `Found ${ev.found || 0} of ${ev.props.length}.`);
+    if (ev.sick) lines.push(ev.sick.length ? `${ev.total - ev.sick.length} of ${ev.total} villagers recovered.` : 'Everyone is healthy again!');
+    if (ev.burned) lines.push(`Burned ${ev.burned} wood to keep warm.`);
+    if (ev.id === 'birthday') lines.push(ev.gifted ? 'The birthday was a hit!' : 'Nobody brought a present...');
+    const extra = {};
+    for (const [k, v] of Object.entries(ev.gain || {})) if (Math.round(v) > 0) extra[k] = Math.round(v);
+    return { title, text: lines.join(' '), reward, extra, big };
+  }
+
+  /** Give a reward that belongs to the running event (tracked for its summary). Returns what was given, xp included. */
+  _grant(ev, reward) {
+    const got = this.give(reward);
+    if (reward.xp) got.xp = reward.xp;
+    if (ev) for (const [k, v] of Object.entries(got)) ev.got[k] = (ev.got[k] || 0) + v;
+    return got;
+  }
+  _cheer(n) {
+    for (const p of this.I.npcs) p.mood = clamp(p.mood + n, 0, 100);
+  }
+
+  /** Hourly rules of the running event: new props, firewood, colds clearing up. */
+  eventHourly() {
+    const ev = this.eventHere();
+    if (!ev) return;
+    const def = EVENT_BY_ID[ev.id];
+    const fx = def.fx || NO_FX;
+    const I = this.I;
+    if (def.props?.perHour && this.propsLeft(ev) < (def.props.max || 6)) for (let n = 0; n < def.props.perHour; n++) this._spawnProp(ev, def.props.kind);
+    if (fx.burnWood) {
+      let homes = 0;
+      for (const b of I.buildings) if (this.housingOf(b) > 0 && I.npcs.some((p) => p.home === b.id)) homes++;
+      const need = homes * fx.burnWood;
+      const burn = Math.min(need, Math.floor(this.s.res.wood));
+      this.s.res.wood -= burn;
+      ev.burned = (ev.burned || 0) + burn;
+      const warm = burn >= need;
+      if (!warm && ev.warm !== false) this.emit('toast', { text: 'Out of firewood! The villagers are freezing.', kind: 'warn', icon: 'snowflake' });
+      ev.warm = warm;
+      this.emit('res');
+    }
+    if (ev.sick?.length) {
+      for (const id of [...ev.sick]) {
+        const p = I.npcs.find((q) => q.id === id);
+        if (!p) this._cure(ev, id, false);
+        else if (p.need.food > 60 && p.need.energy > 55 && Math.random() < 0.2) this._cure(ev, id, false, p);
+        if (this.s.event !== ev) break;
+      }
+    }
+  }
+
+  _cure(ev, id, byMayor, p = null) {
+    ev.sick = ev.sick.filter((x) => x !== id);
+    if (byMayor) ev.cured = (ev.cured || 0) + 1;
+    if (p) this.emit('event:cure', { p, byMayor, left: ev.sick.length });
+    if (!ev.sick.length && EVENT_BY_ID[ev.id].endWhenDone) this.endEvent('done');
+  }
+
+  /** Gifts during events: the birthday villager, or curing a sick one. */
+  _eventGift(p) {
+    const ev = this.eventHere();
+    if (!ev) return;
+    if (ev.id === 'birthday' && ev.npc === p.id && !ev.gifted) {
+      ev.gifted = 1;
+      p.friend = clamp((p.friend || 0) + 24, 0, 100); // 3x the usual friendship
+      p.mood = clamp(p.mood + 15, 0, 100);
+      const lvl = this.s.player.level;
+      const got = this._grant(ev, { coins: 80 + lvl * 20, xp: 40 + lvl * 2 });
+      this.emit('event:gift', { kind: 'birthday', p, got });
+    } else if (ev.sick?.includes(p.id)) {
+      p.need.energy = clamp(p.need.energy + 30, 0, 100);
+      this._grant(ev, { xp: 15 });
+      this._cure(ev, p.id, true, p);
+    }
+  }
+
+  _spawnProp(ev, kind) {
+    const t = this._propTile(ev, kind);
+    if (!t) return null;
+    const pr = { id: ev.pid++, k: kind, i: t.i, j: t.j };
+    if (kind === 'kid') pr.look = randomLook(Math.random);
+    ev.props.push(pr);
+    this.emit('event:prop', { ev, prop: pr });
+    return pr;
+  }
+  _propTile(ev, kind) {
+    const I = this.I;
+    if (kind === 'bees') {
+      const farms = I.buildings.filter((b) => b.type === 'ladang' && b.built);
+      const s = BUILDINGS.ladang.size;
+      for (let t = 0; t < 8 && farms.length; t++) {
+        const f = farms[Math.floor(Math.random() * farms.length)];
+        const tile = this._freeTileNear(ev, f.i + (s - 1) / 2, f.j + (s - 1) / 2, s);
+        if (tile) return tile;
+      }
+    }
+    if (kind === 'kid') {
+      const keys = Object.keys(I.nodes).filter((k) => I.nodes[k].hp !== 0);
+      for (let t = 0; t < 12 && keys.length; t++) {
+        const k = +keys[Math.floor(Math.random() * keys.length)];
+        const tile = this._freeTileNear(ev, Math.floor(k / N), k % N, 1);
+        if (tile) return tile;
+      }
+    }
+    for (let t = 0; t < 10; t++) {
+      const tile = this.randomFreeTile();
+      if (tile && !this._propAt(ev, tile.i, tile.j)) return tile;
+    }
+    return null;
+  }
+  _propAt(ev, i, j) {
+    return !!ev.props?.some((p) => !p.done && Math.abs(p.i - i) + Math.abs(p.j - j) < 2);
+  }
+  _freeTileNear(ev, ci, cj, r) {
+    const I = this.I;
+    for (let t = 0; t < 24; t++) {
+      const i = Math.round(ci + (Math.random() * 2 - 1) * (r + 0.5)), j = Math.round(cj + (Math.random() * 2 - 1) * (r + 0.5));
+      if (!inside(i, j)) continue;
+      const k = idx(i, j);
+      if (WALKABLE.has(I.t[k]) && !this.occ[k] && !I.nodes[k] && !this._propAt(ev, i, j)) return { i, j };
+    }
+    return null;
+  }
+
+  /** The Mayor reached an event prop (see World event visuals). Returns what was given, or null. */
+  collectEventProp(pid) {
+    const ev = this.eventHere();
+    const pr = ev?.props?.find((p) => p.id === pid && !p.done);
+    if (!pr) return null;
+    pr.done = 1;
+    ev.found = (ev.found || 0) + 1;
+    const lvl = this.s.player.level;
+    let reward, text;
+    switch (pr.k) {
+      case 'star': reward = { essence: 1, crystal: 1 + Math.floor(lvl / 8), xp: 25 }; text = 'You caught a fallen star!'; break;
+      case 'gold': reward = { coins: 200 + lvl * 35, xp: 40 }; text = 'A pot of gold at the end of the rainbow!'; break;
+      case 'dog': reward = { coins: 60 + lvl * 20, xp: 40 }; text = 'The puppy is back home. Its family is overjoyed!'; this._cheer(6); break;
+      case 'kid': reward = { coins: 30 + lvl * 10, xp: 20 }; text = '"Aww, you found me!"'; this._cheer(2); break;
+      case 'chest': reward = this.chestReward(); this.s.stats.chests++; text = 'You found a hidden chest!'; break;
+      case 'dig': reward = this.chestReward(1.8); this.s.stats.chests++; text = 'X marks the spot: buried treasure!'; break;
+      case 'bees': reward = { food: 8 + lvl * 2, coins: 15 + lvl * 3, xp: 15 }; text = 'Shoo! The swarm left its honey behind.'; break;
+      case 'wisp': reward = { crystal: 1 + (lvl >= 8 ? 1 : 0), coins: 20 + lvl * 5, xp: 15 }; text = 'You caught a ghost wisp!'; break;
+      default: reward = { xp: 10 }; text = '';
+    }
+    const got = this._grant(ev, reward);
+    const def = EVENT_BY_ID[ev.id];
+    const left = this.propsLeft(ev);
+    this.emit('event:collect', { ev, def, prop: pr, got, text, left });
+    if (def.endWhenDone && !left) this.endEvent('done');
+    return got;
+  }
+
+  /** The Mayor greets the event's visiting host (bard, royal). */
+  meetHost() {
+    const ev = this.eventHere();
+    if (!ev?.host || ev.host.met) return null;
+    ev.host.met = 1;
+    let got, text;
+    if (ev.host.k === 'bard') {
+      for (const p of this.I.npcs) {
+        p.need.fun = clamp(p.need.fun + 25, 0, 100);
+        p.mood = clamp(p.mood + 4, 0, 100);
+      }
+      got = this._grant(ev, { xp: 30 });
+      text = '"This one is for you, Mayor!" The whole village sings along.';
+    } else {
+      const h = Math.round(this.islandHappiness());
+      got = this._grant(ev, { xp: 50 });
+      text = `"What a charming island!" Happiness is ${h}%. Keep it above 60% for a royal reward.`;
+    }
+    this.emit('event:host', { ev, host: ev.host, got, text });
+    return got;
   }
 
   randomFreeTile() {
@@ -901,13 +1345,17 @@ export class Game {
     const I = this.I;
     if (!I.chest) return null;
     I.chest = null;
-    const lvl = this.s.player.level;
-    const reward = { coins: 80 + lvl * 25 + Math.floor(Math.random() * 100), xp: 30 + lvl * 5 };
-    const extra = ['plank', 'brick', 'glass', 'tool', 'crystal'].filter((r) => (r !== 'crystal' || lvl >= 10) && (r !== 'tool' || lvl >= 5));
-    const r = extra[Math.floor(Math.random() * extra.length)];
-    reward[r] = 3 + Math.floor(Math.random() * 5);
+    const reward = this.chestReward();
     this.s.stats.chests++;
     this.give(reward);
+    return reward;
+  }
+  chestReward(scale = 1) {
+    const lvl = this.s.player.level;
+    const reward = { coins: Math.round((80 + lvl * 25 + Math.floor(Math.random() * 100)) * scale), xp: Math.round((30 + lvl * 5) * scale) };
+    const extra = ['plank', 'brick', 'glass', 'tool', 'crystal'].filter((r) => (r !== 'crystal' || lvl >= 10) && (r !== 'tool' || lvl >= 5));
+    const r = extra[Math.floor(Math.random() * extra.length)];
+    reward[r] = Math.round((3 + Math.floor(Math.random() * 5)) * scale);
     return reward;
   }
 
@@ -934,7 +1382,11 @@ export class Game {
   }
 
   sellMultiplier() {
-    return this.s.event?.id === 'caravan' ? 1.5 : 1;
+    const ev = this.s.event;
+    const fx = ev && EVENT_BY_ID[ev.id]?.fx;
+    if (!fx?.sell) return 1;
+    if (fx.sellNight && !NIGHT_SALE(this.s.time.hour)) return 1;
+    return fx.sell;
   }
 
   // ---------------------------------------------------------------- market
@@ -967,9 +1419,9 @@ export class Game {
     let total = 0;
     const cap = this.storageCap();
     n = Math.min(n, cap - this.s.res[r]);
-    if (n <= 0) return { ok: false, reason: 'Gudang penuh' };
+    if (n <= 0) return { ok: false, reason: 'Storage is full' };
     for (let k = 0; k < n; k++) total += this.buyPrice(r);
-    if (this.s.player.coins < total) return { ok: false, reason: 'Koin tidak cukup' };
+    if (this.s.player.coins < total) return { ok: false, reason: 'Not enough Coins' };
     this.s.player.coins -= total;
     this.s.res[r] += n;
     this.s.market[r] = Math.min(1.4, this.s.market[r] + 0.01 * n);
@@ -987,11 +1439,11 @@ export class Game {
   craft(id) {
     const R = RECIPES.find((r) => r.id === id);
     if (!R) return { ok: false };
-    if (this.s.player.level < R.unlock) return { ok: false, reason: `Terbuka di level ${R.unlock}` };
+    if (this.s.player.level < R.unlock) return { ok: false, reason: `Unlocks at level ${R.unlock}` };
     const slots = this.craftSlots();
-    if (!slots) return { ok: false, reason: 'Bangun Bengkel dulu' };
-    if (this.s.craft.queue.length >= slots + 3) return { ok: false, reason: 'Antrean penuh' };
-    if (!this.pay(R.in)) return { ok: false, reason: 'Kurang: ' + this.missing(R.in).join(', ') };
+    if (!slots) return { ok: false, reason: 'Build a Workshop first' };
+    if (this.s.craft.queue.length >= slots + 3) return { ok: false, reason: 'Queue is full' };
+    if (!this.pay(R.in)) return { ok: false, reason: 'Need: ' + this.missing(R.in).join(', ') };
     const now = Date.now();
     // jobs run in parallel up to the slot count; extra jobs wait in line
     const running = this.s.craft.queue.slice(0, slots);
@@ -1033,8 +1485,8 @@ export class Game {
 
   upgradeTool() {
     const next = TOOL_TIERS[this.s.player.tool + 1];
-    if (!next) return { ok: false, reason: 'Sudah alat terbaik' };
-    if (!this.pay(next.cost)) return { ok: false, reason: 'Kurang: ' + this.missing(next.cost).join(', ') };
+    if (!next) return { ok: false, reason: 'You have the best tool' };
+    if (!this.pay(next.cost)) return { ok: false, reason: 'Need: ' + this.missing(next.cost).join(', ') };
     this.s.player.tool++;
     this.addXp(40);
     return { ok: true, tool: next };
@@ -1045,13 +1497,13 @@ export class Game {
   islandStatus(id) {
     const B = BIOMES[id];
     if (this.s.islands[id]) return { open: true };
-    if (this.s.player.level < B.unlock) return { open: false, reason: `Butuh level ${B.unlock}`, canBuy: false };
+    if (this.s.player.level < B.unlock) return { open: false, reason: `Needs level ${B.unlock}`, canBuy: false };
     return { open: false, canBuy: this.s.player.coins >= B.cost, cost: B.cost };
   }
   unlockIsland(id) {
     const st = this.islandStatus(id);
     if (st.open) return { ok: true };
-    if (!st.canBuy) return { ok: false, reason: st.reason || 'Koin tidak cukup' };
+    if (!st.canBuy) return { ok: false, reason: st.reason || 'Not enough Coins' };
     this.s.player.coins -= BIOMES[id].cost;
     const I = generateIsland(id, this.s.seed + BIOME_KEYS.indexOf(id) * 17);
     I.lastAbs = this.absHour();

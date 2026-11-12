@@ -13,18 +13,20 @@ export const QUANTIZE = { none: 0, levels: 1, palette: 2 };
 export const defaultLook = () => ({
   pixelSize: 4,
   quantize: 'levels',
-  levels: 14,
+  // Pixel Diorama: more levels, lighter dither and vignette, a little more exposure. The original
+  // values (14 levels, 0.55 dither, 0.22 vignette) read as dark and grainy on phone screens.
+  levels: 20,
   palette: 'Harbour',
-  dither: 0.55,
+  dither: 0.3,
   outline: 0.5,
   highlight: 0.3,
   edge: 0.3,
   bloom: 0.9,
   bloomThreshold: 2.4,
-  exposure: 1.0,
-  contrast: 1.06,
-  saturation: 1.12,
-  vignette: 0.22,
+  exposure: 1.12,
+  contrast: 1.05,
+  saturation: 1.16,
+  vignette: 0.1,
   texture: 1.0,
 });
 

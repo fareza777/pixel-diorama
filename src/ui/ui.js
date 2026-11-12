@@ -3,7 +3,8 @@
 // orientation, with safe-area padding.
 import * as THREE from 'three';
 import { icon, iconURL, WEATHER_ICON, WEATHER_NAME } from './icons.js';
-import { thumb } from './thumbs.js';
+import { thumb, thumbFurni } from './thumbs.js';
+import { FURNITURE, FURNI_CATS, WALLPAPERS, FLOORS, ENTERABLE, comfortStars, homeStats } from '../game/furniture.js';
 import {
   RES, RES_KEYS, BIOMES, BIOME_KEYS, BUILDINGS, BUILD_CATS, MAX_LEVEL, upgradeCost, RECIPES, TOOL_TIERS, NODES,
   QUESTS, ACHIEVEMENTS, TALK, PAINTS, xpForLevel, TIPS, EVENTS,
@@ -17,12 +18,12 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const fmt = (n) => {
   n = Math.floor(n);
-  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + 'jt';
-  if (Math.abs(n) >= 1e5) return Math.round(n / 1e3) + 'rb';
-  return n.toLocaleString('id-ID');
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1e5) return Math.round(n / 1e3) + 'k';
+  return n.toLocaleString('en-US');
 };
 const resIcon = (k) => (k === 'coins' ? 'coin' : k === 'xp' ? 'xp' : RES[k]?.icon || 'info');
-const resName = (k) => (k === 'coins' ? 'Koin' : k === 'xp' ? 'XP' : RES[k]?.name || k);
+const resName = (k) => (k === 'coins' ? 'Coins' : k === 'xp' ? 'XP' : RES[k]?.name || k);
 const pad2 = (n) => String(Math.floor(n)).padStart(2, '0');
 
 export class UI {
@@ -61,18 +62,18 @@ export class UI {
             <div class="chip" id="c-happy">${icon('happy')}<span>0%</span></div>
           </div>
           <div class="spacer"></div>
-          <button class="chip clock" data-act="speed" id="c-clock">${icon('sun')}<span>Hari 1 · 08:00</span><em id="c-speed">1x</em></button>
+          <button class="chip clock" data-act="speed" id="c-clock">${icon('sun')}<span>Day 1 · 08:00</span><em id="c-speed">1x</em></button>
           <button class="ibtn" data-act="settings">${icon('gear')}</button>
         </div>
         <div class="hud-row res" id="resbar" data-act="inventory"></div>
         <div id="event" class="banner hidden" data-act="eventinfo"></div>
       </div>
       <div id="side">
-        <button class="ibtn" data-act="quests">${icon('quest')}<i class="badge hidden" id="b-quests"></i><small>Misi</small></button>
-        <button class="ibtn" data-act="daily" id="btn-daily">${icon('gift')}<i class="badge hidden" id="b-daily">!</i><small>Hadiah</small></button>
-        <button class="ibtn" data-act="map">${icon('map')}<small>Peta</small></button>
-        <button class="ibtn" data-act="achievements">${icon('trophy')}<small>Prestasi</small></button>
-        <button class="ibtn" data-act="citizens">${icon('people')}<small>Warga</small></button>
+        <button class="ibtn" data-act="quests">${icon('quest')}<i class="badge hidden" id="b-quests"></i><small>Quests</small></button>
+        <button class="ibtn" data-act="daily" id="btn-daily">${icon('gift')}<i class="badge hidden" id="b-daily">!</i><small>Rewards</small></button>
+        <button class="ibtn" data-act="map">${icon('map')}<small>Map</small></button>
+        <button class="ibtn" data-act="achievements">${icon('trophy')}<small>Awards</small></button>
+        <button class="ibtn" data-act="citizens">${icon('people')}<small>Villagers</small></button>
       </div>
       <div id="camctl">
         <button class="ibtn sm" data-act="rotl">${icon('rotl')}</button>
@@ -80,10 +81,10 @@ export class UI {
         <button class="ibtn sm" data-act="follow" id="btn-follow">${icon('center')}</button>
       </div>
       <div id="toolbar">
-        <button class="tbtn" data-act="build">${icon('build')}<span>Bangun</span></button>
-        <button class="tbtn" data-act="road">${icon('road')}<span>Jalan</span></button>
-        <button class="tbtn" data-act="craft">${icon('craft')}<span>Kerajinan</span></button>
-        <button class="tbtn" data-act="market">${icon('market')}<span>Pasar</span></button>
+        <button class="tbtn" data-act="build">${icon('build')}<span>Build</span></button>
+        <button class="tbtn" data-act="road">${icon('road')}<span>Road</span></button>
+        <button class="tbtn" data-act="craft">${icon('craft')}<span>Craft</span></button>
+        <button class="tbtn" data-act="market">${icon('market')}<span>Market</span></button>
       </div>
       <div id="placebar" class="hidden"></div>
       <div id="hint" class="hidden"></div>
@@ -96,7 +97,7 @@ export class UI {
       <div id="title">
         <div class="title-box">
           <div class="logo"><span class="l1">PIXEL</span><span class="l2">DIORAMA</span><span class="l3">World Builder</span></div>
-          <button class="btn primary big" data-act="start" id="btn-start">Memuat...</button>
+          <button class="btn primary big" data-act="start" id="btn-start">Loading...</button>
           <div class="credit">F7 Developer</div>
         </div>
       </div>`;
@@ -115,7 +116,7 @@ export class UI {
 
   ready(hasSave) {
     const b = $('#btn-start');
-    b.textContent = hasSave ? 'Lanjutkan' : 'Mulai Bermain';
+    b.textContent = hasSave ? 'Continue' : 'Play';
     b.disabled = false;
   }
 
@@ -146,7 +147,7 @@ export class UI {
       case 'speed': {
         const sp = g.s.settings.speed >= 3 ? 1 : g.s.settings.speed + 1;
         g.s.settings.speed = sp;
-        this.toast(`Kecepatan waktu ${sp}x`);
+        this.toast(`Game speed ${sp}x`);
         this.refreshHUD(true);
         break;
       }
@@ -178,6 +179,25 @@ export class UI {
       case 'b-rotate': this.doRotate(); break;
       case 'b-demolish': this.doDemolish(); break;
       case 'b-craft': this.openCraft(); break;
+      case 'b-enter': this.closeSheet(); this.app.enterHouse(this._bRec); break;
+      case 'in-exit': this.app.leaveHouse(); break;
+      case 'in-furnish': this.setFurnish(true); break;
+      case 'in-done': this.setFurnish(false); break;
+      case 'in-shop': this.openFurniShop(arg); break;
+      case 'in-store': this.openFurniStorage(); break;
+      case 'in-style': this.openFinishes(arg); break;
+      case 'in-sleep': this.trySleep(); break;
+      case 'in-info': this.openHouseInfo(); break;
+      case 'furn-buy': this.startFurni(arg, false); break;
+      case 'furn-inv': this.startFurni(arg, true); break;
+      case 'fp-ok': this.confirmFurni(); break;
+      case 'fp-rot': this.app.interior.rotatePlace(); this.sfx('pop'); break;
+      case 'fp-cancel': this.app.interior.cancelPlace(); this.renderPlacebar(); break;
+      case 'f-move': { const I = this.app.interior; const f = I.rec.furni[I.selected]; if (f) { I.startPlace(f.t, { move: I.selected }); this.renderPlacebar(); } break; }
+      case 'f-store': { const t = this.app.interior.storeSelected(); if (t) this.toast(`${FURNITURE[t].name} put in storage`, { icon: 'storage', ms: 1400 }); this.renderPlacebar(); break; }
+      case 'f-sell': this.sellFurni(); break;
+      case 'f-desel': this.app.interior.select(-1); break;
+      case 'style-set': this.applyFinish(el.dataset.kind, +arg); break;
       case 'b-market': this.openMarket(); break;
       case 'npc-talk': this.npcTalk(); break;
       case 'npc-gift': this.npcGift(); break;
@@ -218,7 +238,7 @@ export class UI {
     const w = g.weatherName();
     const night = T.hour < 6 || T.hour >= 19.5;
     $('#c-clock img').src = iconURL(w === 'clear' ? (night ? 'moon' : 'sun') : WEATHER_ICON[w]);
-    $('#c-clock span').textContent = `Hari ${T.day} · ${pad2(T.hour)}:${pad2((T.hour % 1) * 60)}`;
+    $('#c-clock span').textContent = `Day ${T.day} · ${pad2(T.hour)}:${pad2((T.hour % 1) * 60)}`;
     $('#c-speed').textContent = `${s.settings.speed}x`;
     // resources: always the basics, plus anything the player owns
     const cap = g.storageCap();
@@ -239,10 +259,20 @@ export class UI {
     if (ev && ev.island === g.biome) {
       const def = EVENTS.find((e) => e.id === ev.id);
       const left = Math.max(0, ev.until - g.absHour());
-      eb.innerHTML = `${icon('event')}<b>${esc(def.name)}</b><span>${Math.floor(left)}j ${pad2((left % 1) * 60)}m</span>`;
+      const prog = ev.props?.length ? ` · ${ev.found || 0}/${ev.props.length}` : ev.sick ? ` · ${ev.sick.length} sick` : '';
+      eb.innerHTML = `${icon(def.icon || 'event')}<b>${esc(def.name)}${prog}</b><span>${Math.floor(left)}h ${pad2((left % 1) * 60)}m</span>`;
+      eb.classList.toggle('bad', def.kind === 'bad');
       eb.classList.remove('hidden');
     } else eb.classList.add('hidden');
     $('#btn-follow').classList.toggle('on', !!this.app.cam.follow);
+    // the indoor bar shows live status (who sleeps, bedtime)
+    if (this.mode === 'interior' && this.app.interior.active) {
+      const h = this.interiorBarHTML();
+      if (h !== this._ibHTML) {
+        $('#placebar').innerHTML = h;
+        this._ibHTML = h;
+      }
+    }
     if (this.panel?.live) this.panel.live();
   }
 
@@ -256,8 +286,9 @@ export class UI {
         $('#fps').textContent = `${p.fps} fps · ${TIERS[p.tier].name}${p.extraPixel ? ' +' + p.extraPixel : ''}`;
       }
     }
-    // popups follow the world
+    // popups follow the world (hidden while indoors: they belong to the island)
     const now = performance.now();
+    const indoors = this.app.interior.active;
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const P = this.popups[i];
       const t = (now - P.t0) / 1400;
@@ -268,10 +299,10 @@ export class UI {
       }
       const s = this.world.project(P.pos);
       P.el.style.transform = `translate(${s.x}px, ${s.y - t * 36}px) translate(-50%, -100%)`;
-      P.el.style.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+      P.el.style.opacity = indoors ? 0 : t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
     }
     // emotes
-    const list = this.world.emotes(this.emoteEls.length);
+    const list = (indoors ? this.app.interior : this.world).emotes(this.emoteEls.length);
     this.emoteEls.forEach((el, i) => {
       const e = list[i];
       if (!e) {
@@ -340,7 +371,7 @@ export class UI {
     return `<div class="rewards">${Object.entries(items || {}).filter(([, v]) => v).map(([k, v]) => `<div class="rw">${icon(resIcon(k), 'lg')}<b>+${fmt(v)}</b><small>${esc(resName(k))}</small></div>`).join('')}</div>`;
   }
   confirm(title, text, yes, onYes) {
-    this.modal(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button class="btn" data-act="modal-ok">Batal</button><button class="btn danger" id="confirm-yes">${esc(yes)}</button></div>`);
+    this.modal(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button class="btn" data-act="modal-ok">Cancel</button><button class="btn danger" id="confirm-yes">${esc(yes)}</button></div>`);
     $('#confirm-yes').onclick = () => {
       this._modalClose = null;
       this.closeModal();
@@ -409,10 +440,10 @@ export class UI {
         return `<button class="card ${locked ? 'locked' : ''} ${limited ? 'done' : ''}" data-act="pick-build" data-arg="${id}" ${locked || limited ? 'disabled' : ''}>
           <div class="thumb"><img data-thumb="${biome}:${id}" src="${src || iconURL('build')}" alt=""></div>
           <b>${esc(d.name)}</b>
-          ${locked ? `<div class="lockline">${icon('lock')} Level ${d.unlock}</div>` : limited ? `<div class="lockline">Sudah dibangun</div>` : `<div class="costs">${this.costHTML(d.cost)}</div>`}
+          ${locked ? `<div class="lockline">${icon('lock')} Level ${d.unlock}</div>` : limited ? `<div class="lockline">Already built</div>` : `<div class="costs">${this.costHTML(d.cost)}</div>`}
         </button>`;
       }).join('');
-    this.openSheet(`${icon('build')} Bangun di ${esc(BIOMES[biome].short)}`, `<div class="tabs">${tabs}</div><div class="cards">${cards || '<p class="muted">Belum ada bangunan di kategori ini untuk pulau ini.</p>'}</div>`, { kind: 'build', wide: true });
+    this.openSheet(`${icon('build')} Build · ${esc(BIOMES[biome].short)}`, `<div class="tabs">${tabs}</div><div class="cards">${cards || '<p class="muted">No buildings in this category for this island yet.</p>'}</div>`, { kind: 'build', wide: true });
   }
 
   startPlace(type) {
@@ -424,7 +455,7 @@ export class UI {
     this.placeTile = t;
     document.body.classList.add('placing');
     this.updateGhost();
-    this.showHint(`Ketuk petak untuk memindahkan ${BUILDINGS[type].name}. Geser untuk melihat sekeliling.`, 'place');
+    this.showHint(`Tap a tile to move the ${BUILDINGS[type].name}. Drag to look around.`, 'place');
   }
 
   updateGhost() {
@@ -447,12 +478,15 @@ export class UI {
         <button class="ibtn" data-act="place-rot">${icon('rotr')}</button>
         <button class="ibtn ok ${chk.ok ? '' : 'off'}" data-act="place-ok">${icon('check')}</button>`;
     } else if (this.mode === 'road') {
-      bar.innerHTML = `<div class="pb-info"><b>${this.roadErase ? 'Hapus Jalan' : 'Bangun Jalan'}</b><div class="muted">${this.roadErase ? 'Ketuk atau seret untuk menghapus' : 'Ketuk atau seret · 1 batu per petak'}</div></div>
+      bar.innerHTML = `<div class="pb-info"><b>${this.roadErase ? 'Remove Road' : 'Build Road'}</b><div class="muted">${this.roadErase ? 'Tap or drag to remove' : 'Tap or drag · 1 stone per tile'}</div></div>
         <button class="ibtn ${!this.roadErase ? 'on' : ''}" data-act="road-on">${icon('road')}</button>
         <button class="ibtn ${this.roadErase ? 'on' : ''}" data-act="road-off">${icon('trash')}</button>
         <button class="ibtn ok" data-act="road-done">${icon('check')}</button>`;
+    } else if (this.mode === 'interior' || this.mode === 'furnish') {
+      bar.innerHTML = this.interiorBarHTML();
     }
     bar.classList.toggle('hidden', this.mode === 'explore');
+    bar.classList.toggle('inbar', this.mode === 'interior' || this.mode === 'furnish');
     $('#toolbar').classList.toggle('hidden', this.mode !== 'explore');
   }
 
@@ -467,7 +501,7 @@ export class UI {
     }
     this.sfx('place');
     buzz('medium');
-    this.toast(`${BUILDINGS[type].name} sedang dibangun`, { icon: 'build' });
+    this.toast(`Building ${BUILDINGS[type].name}...`, { icon: 'build' });
     const d = BUILDINGS[type];
     // keep placing small things; leave placement for big ones or when out of money
     if (d.small && this.game.has(d.cost)) {
@@ -483,10 +517,12 @@ export class UI {
     this.app.cam.mode = 'paint';
     document.body.classList.add('placing');
     this.renderPlacebar();
-    this.showHint('Seret satu jari untuk menggambar jalan. Pakai dua jari untuk menggeser kamera.', 'road');
+    this.showHint('Drag one finger to draw roads. Use two fingers to move the camera.', 'road');
   }
 
   exitMode() {
+    if (this.mode === 'furnish') return this.setFurnish(false);
+    if (this.mode === 'interior') return this.app.leaveHouse();
     this.mode = 'explore';
     this.placeType = null;
     this.world.clearGhost();
@@ -496,10 +532,245 @@ export class UI {
     if (this._hintKind === 'place' || this._hintKind === 'road') this.dismissHint();
   }
 
+  // ---------------------------------------------------------------- house interiors
+
+  iconHTML(name, cls = '') {
+    return icon(name, cls);
+  }
+  starsHTML(n, max = 5) {
+    return `<span class="cstars">${Array.from({ length: max }, (_, k) => `<i class="cstar ${k < n ? 'on' : ''}"></i>`).join('')}</span>`;
+  }
+
+  houseTitle(rec = this.app.interior.rec) {
+    if (!rec) return '';
+    if (rec.type === 'balai') return "Mayor's House";
+    const res = this.game.I.npcs.filter((p) => p.home === rec.id);
+    if (!res.length) return `Empty ${BUILDINGS[rec.type].name}`;
+    if (res.length === 1) return `${res[0].name}'s home`;
+    return `${res[0].name}'s family`;
+  }
+
+  onEnterHouse(rec) {
+    this.closeSheet();
+    this.mode = 'interior';
+    document.body.classList.add('indoors');
+    this.renderPlacebar();
+    const g = this.game;
+    if (!g.s.seenInterior) {
+      g.s.seenInterior = 1;
+      this.showHint(rec.type === 'balai' ? 'This is your own house. Tap the floor to walk, tap the bed at night to sleep until morning, and press Decorate to furnish it.' : 'Tap the floor to walk around. Residents come home in the evening and sleep here at night. Press Decorate to buy and arrange furniture: comfy homes make happier villagers.', 'interior');
+    } else this.toast(this.houseTitle(rec), { icon: 'home', ms: 1600 });
+  }
+
+  onLeaveHouse() {
+    this.mode = 'explore';
+    document.body.classList.remove('indoors');
+    if (this._hintKind === 'interior' || this._hintKind === 'furnish') this.dismissHint();
+    this.renderPlacebar();
+    this.refreshHUD(true);
+  }
+
+  interiorBarHTML() {
+    const I = this.app.interior, g = this.game;
+    if (!I.active) return '';
+    const rec = I.rec;
+    if (this.mode === 'furnish') {
+      if (I.place) {
+        const d = FURNITURE[I.place.t];
+        const cost = I.place.move >= 0 || I.place.fromInv ? `<div class="muted">${I.place.move >= 0 ? 'Moving' : 'From storage'}</div>` : `<div class="costs">${this.costHTML(d.cost)}</div>`;
+        return `<div class="pb-info"><b>${esc(d.name)}</b>${cost}${I.place.ok ? '' : `<div class="warn">${d.wall ? 'Pick a free spot on a wall' : "Doesn't fit here"}</div>`}</div>
+          <button class="ibtn" data-act="fp-cancel">${icon('cross')}</button>
+          <button class="ibtn" data-act="fp-rot">${icon('rotate')}</button>
+          <button class="ibtn ok ${I.place.ok ? '' : 'off'}" data-act="fp-ok">${icon('check')}</button>`;
+      }
+      const f = rec.furni[I.selected];
+      if (f) {
+        const d = FURNITURE[f.t];
+        return `<div class="pb-info"><b>${esc(d.name)}</b><div class="muted">Comfort +${d.comfort || 0}${d.sleeps ? ` · sleeps ${d.sleeps}` : ''}</div></div>
+          <button class="ibtn" data-act="f-move">${icon('move')}</button>
+          <button class="ibtn" data-act="f-store">${icon('storage')}</button>
+          <button class="ibtn" data-act="f-sell">${icon('coin')}</button>
+          <button class="ibtn ok" data-act="f-desel">${icon('check')}</button>`;
+      }
+      const st = I.stats();
+      return `<div class="pb-info"><b>Decorating</b><div class="muted">Comfort ${this.starsHTML(comfortStars(st.comfort))}</div></div>
+        <button class="ibtn" data-act="in-shop">${icon('shop')}<small>Shop</small></button>
+        <button class="ibtn" data-act="in-store">${icon('storage')}<small>Stored</small></button>
+        <button class="ibtn" data-act="in-style">${icon('paint')}<small>Style</small></button>
+        <button class="ibtn ok" data-act="in-done">${icon('check')}</button>`;
+    }
+    const st = I.stats();
+    const res = rec.type === 'balai' ? 1 : this.game.residentsOf(rec);
+    const home = [...I.people.values()];
+    const asleep = home.filter((r) => r.act === 'sleep' || r.act === 'floorSleep').length;
+    const status = rec.type === 'balai' ? (g.canSleep() ? 'Bedtime' : g.isRested() ? 'Well rested' : 'Home') : home.length ? (asleep ? `${asleep} asleep` : `${home.length} home`) : 'All out';
+    return `<button class="pb-info" data-act="in-info"><b>${esc(this.houseTitle(rec))}</b><div class="muted">${this.starsHTML(comfortStars(st.comfort))} ${icon('bed')}${st.sleeps}/${res} · ${esc(status)}</div></button>
+      <button class="ibtn" data-act="in-exit">${icon('exit')}<small>Leave</small></button>
+      ${rec.type === 'balai' ? `<button class="ibtn ${g.canSleep() ? 'glow' : ''}" data-act="in-sleep">${icon('sleep')}<small>Sleep</small></button>` : ''}
+      <button class="ibtn ok" data-act="in-furnish">${icon('furniture')}<small>Decorate</small></button>`;
+  }
+
+  setFurnish(on) {
+    const I = this.app.interior;
+    if (!I.active) return;
+    if (!on) {
+      I.cancelPlace();
+      I.select(-1);
+    }
+    this.mode = on ? 'furnish' : 'interior';
+    this.renderPlacebar();
+    if (on && !this.game.s.seenFurnish) {
+      this.game.s.seenFurnish = 1;
+      this.showHint('Open the Shop to buy furniture. Tap an item in the room to move, store or sell it. Rotate the camera to reach the other walls.', 'furnish');
+    }
+  }
+
+  openFurniShop(cat = this._furniCat || 'bed') {
+    this._furniCat = cat;
+    const g = this.game;
+    const tabs = FURNI_CATS.map((c) => `<button class="tab ${c.id === cat ? 'on' : ''}" data-act="in-shop" data-arg="${c.id}">${esc(c.name)}</button>`).join('');
+    const cards = Object.entries(FURNITURE)
+      .filter(([, d]) => d.cat === cat)
+      .sort((a, b) => (a[1].unlock || 1) - (b[1].unlock || 1))
+      .map(([id, d]) => {
+        const locked = !g.furniUnlocked(id);
+        const src = thumbFurni(id, (url) => {
+          const im = document.querySelector(`img[data-fthumb="${id}"]`);
+          if (im && url) im.src = url;
+        });
+        const owned = g.s.furn[id] || 0;
+        return `<button class="card furn ${locked ? 'locked' : ''}" data-act="furn-buy" data-arg="${id}" ${locked ? 'disabled' : ''}>
+          <div class="thumb"><img data-fthumb="${id}" src="${src || iconURL(d.icon)}" alt="">${owned ? `<i class="fcount">${owned}</i>` : ''}</div>
+          <b>${esc(d.name)}</b>
+          <div class="fmeta">${icon('heart')}+${d.comfort || 0}${d.sleeps ? ` ${icon('bed')}${d.sleeps}` : ''}${d.fun ? ` ${icon('fun')}` : ''}</div>
+          ${locked ? `<div class="lockline">${icon('lock')} Level ${d.unlock}</div>` : `<div class="costs">${this.costHTML(d.cost)}</div>`}
+        </button>`;
+      }).join('');
+    this.openSheet(`${icon('shop')} Furniture Shop`, `<div class="tabs">${tabs}</div><div class="cards">${cards}</div>`, { kind: 'furni', wide: true });
+  }
+
+  openFurniStorage() {
+    const g = this.game;
+    const items = Object.entries(g.s.furn).filter(([id, n]) => n > 0 && FURNITURE[id]);
+    const cards = items.map(([id, n]) => {
+      const d = FURNITURE[id];
+      const src = thumbFurni(id, (url) => {
+        const im = document.querySelector(`img[data-fthumb="${id}"]`);
+        if (im && url) im.src = url;
+      });
+      return `<button class="card furn" data-act="furn-inv" data-arg="${id}"><div class="thumb"><img data-fthumb="${id}" src="${src || iconURL(d.icon)}" alt=""><i class="fcount">${n}</i></div><b>${esc(d.name)}</b><div class="fmeta">${icon('heart')}+${d.comfort || 0}</div></button>`;
+    }).join('');
+    this.openSheet(`${icon('storage')} Stored furniture`, items.length ? `<div class="cards">${cards}</div>` : `<p class="muted">Nothing in storage. Tap an item in the room and press ${icon('storage')} to store it here.</p>`, { kind: 'furni', wide: true });
+  }
+
+  startFurni(id, fromInv) {
+    const g = this.game, d = FURNITURE[id];
+    if (!fromInv && !g.has(d.cost)) {
+      this.sfx('error');
+      return this.toast('Need: ' + g.missing(d.cost).join(', '), { kind: 'warn' });
+    }
+    this.closeSheet();
+    if (this.mode !== 'furnish') this.setFurnish(true);
+    this.app.interior.startPlace(id, { fromInv });
+    this.renderPlacebar();
+  }
+
+  confirmFurni() {
+    const I = this.app.interior;
+    const P = I.place;
+    if (!P) return;
+    const moving = P.move >= 0;
+    const r = I.confirmPlace();
+    if (!r.ok) {
+      this.sfx('error');
+      return this.toast(r.reason || "Doesn't fit there", { kind: 'warn' });
+    }
+    this.sfx('place');
+    buzz('medium');
+    const d = FURNITURE[r.t];
+    if (!moving) this.toast(`${d.name} placed · Comfort +${d.comfort || 0}`, { icon: d.icon, ms: 1600 });
+    this.renderPlacebar();
+    this.refreshHUD(true);
+  }
+
+  sellFurni() {
+    const I = this.app.interior;
+    const f = I.rec.furni[I.selected];
+    if (!f) return;
+    const d = FURNITURE[f.t];
+    this.confirm(`Sell ${d.name}?`, `You get ${Math.floor((d.cost.coins || 0) * 0.5)} coins back.`, 'Sell', () => {
+      const got = I.sellSelected();
+      this.sfx('coin');
+      this.toast(`Sold for ${got} coins`, { icon: 'coin' });
+      this.renderPlacebar();
+    });
+  }
+
+  openFinishes(kind = this._finishKind || 'wall') {
+    if (kind !== 'wall' && kind !== 'floor') kind = 'wall';
+    this._finishKind = kind;
+    const g = this.game, rec = this.app.interior.rec;
+    const list = kind === 'wall' ? WALLPAPERS : FLOORS;
+    const owned = g.s.finishes[kind];
+    const cur = rec[kind] || 0;
+    const tabs = `<button class="tab ${kind === 'wall' ? 'on' : ''}" data-act="in-style" data-arg="wall">Wallpaper</button><button class="tab ${kind === 'floor' ? 'on' : ''}" data-act="in-style" data-arg="floor">Floor</button>`;
+    const cards = list.map((d, i) => {
+      const have = owned.includes(i);
+      const sw = kind === 'wall'
+        ? `background:${d.stripes ? `repeating-linear-gradient(90deg, ${d.a} 0 10px, ${d.b} 10px 16px)` : d.brick ? `repeating-linear-gradient(0deg, ${d.a} 0 9px, ${d.b} 9px 11px)` : d.planks ? `repeating-linear-gradient(0deg, ${d.a} 0 10px, ${d.b} 10px 20px)` : d.a}`
+        : `background:${d.tiles ? `repeating-conic-gradient(${d.a} 0 25%, ${d.b} 0 50%) 0 0 / 24px 24px` : `repeating-linear-gradient(0deg, ${d.a} 0 8px, ${d.b} 8px 16px)`}`;
+      return `<button class="card swatch ${i === cur ? 'done' : ''}" data-act="style-set" data-kind="${kind}" data-arg="${i}">
+        <div class="thumb"><div class="sw" style="${sw}"></div></div><b>${esc(d.name)}</b>
+        ${i === cur ? `<div class="lockline">${icon('check')} In use</div>` : have ? '<div class="lockline">Owned</div>' : `<div class="costs">${this.costHTML(d.cost)}</div>`}
+      </button>`;
+    }).join('');
+    this.openSheet(`${icon('paint')} Room style`, `<div class="tabs">${tabs}</div><div class="cards">${cards}</div>`, { kind: 'furni', wide: true });
+  }
+
+  applyFinish(kind, i) {
+    const r = this.game.setFinish(this.app.interior.rec, kind, i);
+    if (!r.ok) {
+      this.sfx('error');
+      return r.reason && this.toast(r.reason, { kind: 'warn' });
+    }
+    this.sfx('place');
+    this.app.interior.rebuild();
+    this.openFinishes(kind);
+  }
+
+  trySleep() {
+    const I = this.app.interior;
+    if (!I.active || I.rec.type !== 'balai') return this.toast('You can only sleep in your own house: the Town Hall.', { icon: 'sleep' });
+    this.app.sleepNight();
+  }
+
+  openHouseInfo() {
+    const I = this.app.interior, g = this.game, rec = I.rec;
+    const st = I.stats();
+    const residents = rec.type === 'balai' ? [] : g.I.npcs.filter((p) => p.home === rec.id);
+    const where = (p) => {
+      const r = I.people.get(p.id);
+      if (r) return r.act === 'sleep' || r.act === 'floorSleep' ? `${icon('sleep')} Sleeping` : r.anim === 'sitEat' ? `${icon('food')} Eating` : r.act === 'cook' ? `${icon('kitchen')} Cooking` : `${icon('home')} At home`;
+      const rt = this.world.npcRuntime(p.id);
+      return rt?.mode === 'work' ? `${icon('work')} At work` : `${icon('people')} Out and about`;
+    };
+    const rows = residents.map((p) => `<button class="row" data-act="npc-goto" data-arg="${p.id}"><b>${esc(p.name)}</b><span class="muted">${where(p)}</span></button>`).join('');
+    const tips = [];
+    if (st.sleeps < residents.length) tips.push(`${icon('bed')} Not enough beds: ${residents.length - st.sleeps} sleep on the floor (mood -8).`);
+    if (!st.cook && rec.type !== 'balai') tips.push(`${icon('kitchen')} A stove lets residents cook at home.`);
+    if (comfortStars(st.comfort) < 3) tips.push(`${icon('heart')} More furniture, rugs and plants make the home cosier.`);
+    this.openSheet(`${icon('home')} ${esc(this.houseTitle(rec))}`, `
+      <div class="stat">${icon('furniture')} Comfort ${this.starsHTML(comfortStars(st.comfort))} <small>(${st.comfort})</small></div>
+      <div class="stat">${icon('bed')} Beds for ${st.sleeps} · ${icon('lamp')} ${st.lights} lights · ${rec.furni.length} items</div>
+      ${rows ? `<h3>Residents</h3><div class="list">${rows}</div>` : ''}
+      ${tips.length ? `<h3>Tips</h3>${tips.map((t) => `<p class="muted">${t}</p>`).join('')}` : ''}`, { kind: 'house' });
+  }
+
   // ---------------------------------------------------------------- taps in the world
 
   onTap(x, y) {
     const w = this.world, g = this.game;
+    if (this.app.interior.active) return this.app.interior.onTap(x, y);
     if (this.mode === 'place') {
       const t = w.pickTile(x, y);
       if (t) {
@@ -542,7 +813,7 @@ export class UI {
         if (w.mayorGather(hit.k)) {
           this.sfx('pop');
           const n = g.I.nodes[hit.k];
-          if (!g.s.tips) this.toast(`Mengumpulkan ${NODES[n.k].name}...`, { icon: RES[NODES[n.k].res].icon, ms: 1400 });
+          if (!g.s.tips) this.toast(`Gathering ${NODES[n.k].name}...`, { icon: RES[NODES[n.k].res].icon, ms: 1400 });
         }
         break;
       }
@@ -578,35 +849,38 @@ export class UI {
       const lvl = rec.level || 1;
       const stars = Array.from({ length: MAX_LEVEL }, (_, k) => `<i class="star ${k < lvl ? 'on' : ''}"></i>`).join('');
       const lines = [];
-      if (!rec.built) lines.push(`<div class="stat">${icon('build')} Sedang dibangun... ${Math.round((rec.progress || 0) * 100)}%</div>`);
+      if (!rec.built) lines.push(`<div class="stat">${icon('build')} Under construction... ${Math.round((rec.progress || 0) * 100)}%</div>`);
       if (d.housing) {
         const res = g.I.npcs.filter((p) => p.home === rec.id);
-        lines.push(`<div class="stat">${icon('home')} Penghuni ${res.length}/${g.housingOf(rec)}</div>`);
+        lines.push(`<div class="stat">${icon('home')} Residents ${res.length}/${g.housingOf(rec)}</div>`);
         if (res.length) lines.push(`<div class="names">${res.map((p) => `<button class="pill" data-act="npc-goto" data-arg="${p.id}">${esc(p.name)}</button>`).join('')}</div>`);
+        const hs = g.homeStatsOf(rec);
+        lines.push(`<div class="stat">${icon('furniture')} Comfort ${this.starsHTML(comfortStars(hs.comfort))} <small>${icon('bed')} ${hs.sleeps} beds</small></div>`);
       }
       if (d.jobs) {
         const ws = g.I.npcs.filter((p) => p.job === rec.id);
         const here = this.world.presence.get(rec.id) || 0;
-        lines.push(`<div class="stat">${icon('work')} Pekerja ${ws.length}/${g.jobsOf(rec)} <small>(${Math.round(here * 10) / 10} sedang bekerja)</small></div>`);
+        lines.push(`<div class="stat">${icon('work')} Workers ${ws.length}/${g.jobsOf(rec)} <small>(${Math.round(here * 10) / 10} on site)</small></div>`);
         if (ws.length) lines.push(`<div class="names">${ws.map((p) => `<button class="pill" data-act="npc-goto" data-arg="${p.id}">${esc(p.name)}</button>`).join('')}</div>`);
       }
       if (d.produce) {
         const lv = 1 + 0.5 * (lvl - 1);
-        lines.push(`<div class="stat">${Object.entries(d.produce).map(([r, v]) => `${icon(resIcon(r))} ${(v * lv).toFixed(1)}/jam per pekerja`).join(' ')}</div>`);
+        lines.push(`<div class="stat">${Object.entries(d.produce).map(([r, v]) => `${icon(resIcon(r))} ${(v * lv).toFixed(1)}/h per worker`).join(' ')}</div>`);
       }
-      if (d.storage) lines.push(`<div class="stat">${icon('storage')} Penyimpanan +${d.storage + (d.storagePerLevel || 0) * (lvl - 1)}</div>`);
-      if (d.happy) lines.push(`<div class="stat">${icon('happy')} Kebahagiaan +${d.happy.amount} (radius ${d.happy.radius})</div>`);
-      if (d.boost) lines.push(`<div class="stat">${icon('up')} Ladang sekitar +${Math.round(d.boost.amount * 100)}%</div>`);
+      if (d.storage) lines.push(`<div class="stat">${icon('storage')} Storage +${d.storage + (d.storagePerLevel || 0) * (lvl - 1)}</div>`);
+      if (d.happy) lines.push(`<div class="stat">${icon('happy')} Happiness +${d.happy.amount} (radius ${d.happy.radius})</div>`);
+      if (d.boost) lines.push(`<div class="stat">${icon('up')} Nearby farms +${Math.round(d.boost.amount * 100)}%</div>`);
       const canUp = !d.fixed && !d.small && lvl < MAX_LEVEL && rec.built;
       const upCost = canUp ? upgradeCost(d, lvl) : null;
       const btns = [];
-      if (canUp) btns.push(`<button class="btn primary" data-act="b-upgrade">${icon('up')} Tingkatkan <span class="costs">${this.costHTML(upCost)}</span></button>`);
-      if (rec.type === 'bengkel') btns.push(`<button class="btn" data-act="b-craft">${icon('craft')} Kerajinan</button>`);
-      if (rec.type === 'pasar') btns.push(`<button class="btn" data-act="b-market">${icon('market')} Berdagang</button>`);
+      if (ENTERABLE.has(rec.type) && rec.built) btns.push(`<button class="btn primary" data-act="b-enter">${icon('enter')} ${rec.type === 'balai' ? "Enter the Mayor's house" : 'Go inside'}</button>`);
+      if (canUp) btns.push(`<button class="btn primary" data-act="b-upgrade">${icon('up')} Upgrade <span class="costs">${this.costHTML(upCost)}</span></button>`);
+      if (rec.type === 'bengkel') btns.push(`<button class="btn" data-act="b-craft">${icon('craft')} Craft</button>`);
+      if (rec.type === 'pasar') btns.push(`<button class="btn" data-act="b-market">${icon('market')} Trade</button>`);
       if (!d.fixed) {
-        btns.push(`<button class="btn" data-act="b-paint">${icon('paint')} Cat: ${esc(PAINTS[rec.paint || 0].name)}</button>`);
-        if (!d.needWater) btns.push(`<button class="btn" data-act="b-rotate">${icon('rotr')} Putar</button>`);
-        btns.push(`<button class="btn danger" data-act="b-demolish">${icon('trash')} Bongkar</button>`);
+        btns.push(`<button class="btn" data-act="b-paint">${icon('paint')} Paint: ${esc(PAINTS[rec.paint || 0].name)}</button>`);
+        if (!d.needWater) btns.push(`<button class="btn" data-act="b-rotate">${icon('rotr')} Rotate</button>`);
+        btns.push(`<button class="btn danger" data-act="b-demolish">${icon('trash')} Demolish</button>`);
       }
       return `<p class="desc">${esc(d.desc)}</p><div class="stars">${stars}</div>${lines.join('')}<div class="btns">${btns.join('')}</div>`;
     };
@@ -633,24 +907,24 @@ export class UI {
     }
     this.sfx('levelup');
     buzz('medium');
-    this.toast(`${BUILDINGS[this._bRec.type].name} naik ke level ${this._bRec.level}!`, { icon: 'up' });
+    this.toast(`${BUILDINGS[this._bRec.type].name} reached level ${this._bRec.level}!`, { icon: 'up' });
   }
   doPaint() {
     const p = this.game.repaint(this._bRec);
     this.sfx('pop');
-    this.toast(`Cat: ${p.name}`, { icon: 'paint', ms: 1200 });
+    this.toast(`Paint: ${p.name}`, { icon: 'paint', ms: 1200 });
   }
   doRotate() {
     this.game.rotate(this._bRec);
   }
   doDemolish() {
     const rec = this._bRec;
-    this.confirm('Bongkar bangunan?', `${BUILDINGS[rec.type].name} akan dibongkar. Kamu mendapat kembali setengah biayanya.`, 'Bongkar', () => {
+    this.confirm('Demolish building?', `The ${BUILDINGS[rec.type].name} will be torn down. You get half the cost back.`, 'Demolish', () => {
       const r = this.game.demolish(rec);
       if (r.ok) {
         this.closeSheet();
         this.sfx('place');
-        this.toast('Bangunan dibongkar', { icon: 'trash' });
+        this.toast('Building demolished', { icon: 'trash' });
       }
     });
   }
@@ -675,8 +949,8 @@ export class UI {
       const bar = (v, ic, label) => `<div class="need">${icon(ic)}<small>${label}</small><div class="bar"><i style="width:${Math.round(v)}%" class="${v < 25 ? 'bad' : v < 55 ? 'mid' : ''}"></i></div></div>`;
       const hearts = Math.round((p.friend || 0) / 20);
       const st = this.world.npcRuntime(id);
-      const doing = !st ? '' : { walk: 'Sedang berjalan', work: 'Sedang bekerja', leisure: 'Sedang bersantai', dance: 'Berpesta!', inside: 'Di dalam rumah', idle: 'Sedang santai' }[st.mode] || '';
-      const req = p.req ? `<div class="request">${icon('quest')}<div><b>Permintaan</b><p>"Bisa bawakan ${p.req.n} ${esc(RES[p.req.res].name)}?"</p><div class="costs">Hadiah: ${this.costHTML(p.req.reward)}</div></div><button class="btn primary" data-act="npc-req">Berikan</button></div>` : '';
+      const doing = !st ? '' : { walk: 'Walking', work: 'Working', leisure: 'Relaxing', dance: 'Partying!', inside: 'At home', idle: 'Taking it easy' }[st.mode] || '';
+      const req = p.req ? `<div class="request">${icon('quest')}<div><b>Request</b><p>"Could you bring me ${p.req.n} ${esc(RES[p.req.res].name)}?"</p><div class="costs">Reward: ${this.costHTML(p.req.reward)}</div></div><button class="btn primary" data-act="npc-req">Give</button></div>` : '';
       return `<div class="npc-head">
           <div class="face" style="--skin:${p.look.skin};--hair:${p.look.hair};--coat:${p.look.coat}"><i class="h"></i><i class="s"></i><i class="b"></i></div>
           <div><div class="trait">${esc(tr.name)} · <small>${esc(tr.desc)}</small></div>
@@ -684,10 +958,10 @@ export class UI {
           <div class="muted">${doing}</div></div>
         </div>
         <div class="speech">"${esc(this._npcLine)}"</div>
-        <div class="needs">${bar(p.mood, p.mood > 45 ? 'happy' : 'sad', 'Suasana hati')}${bar(p.need.food, 'food', 'Kenyang')}${bar(p.need.energy, 'energy', 'Energi')}${bar(p.need.fun, 'fun', 'Hiburan')}</div>
-        <div class="stat">${icon('home')} ${home ? esc(BUILDINGS[home.type].name) : '<span class="warn">Belum punya rumah</span>'} &nbsp; ${icon('work')} ${job ? esc(BUILDINGS[job.type].name) : '<span class="muted">Menganggur</span>'}</div>
+        <div class="needs">${bar(p.mood, p.mood > 45 ? 'happy' : 'sad', 'Mood')}${bar(p.need.food, 'food', 'Food')}${bar(p.need.energy, 'energy', 'Energy')}${bar(p.need.fun, 'fun', 'Fun')}</div>
+        <div class="stat">${icon('home')} ${home ? esc(BUILDINGS[home.type].name) : '<span class="warn">No home yet</span>'} &nbsp; ${icon('work')} ${job ? esc(BUILDINGS[job.type].name) : '<span class="muted">Unemployed</span>'}</div>
         ${req}
-        <div class="btns"><button class="btn" data-act="npc-talk">${icon('chat')} Ngobrol</button><button class="btn" data-act="npc-gift">${icon('gift')} Beri makanan (5)</button></div>`;
+        <div class="btns"><button class="btn" data-act="npc-talk">${icon('chat')} Chat</button><button class="btn" data-act="npc-gift">${icon('gift')} Give food (5)</button></div>`;
     };
     this.openSheet(esc(p.name), render(), {
       kind: 'npc',
@@ -747,7 +1021,7 @@ export class UI {
       return this.toast(r.reason, { kind: 'warn' });
     }
     this.sfx('sparkle');
-    this._npcLine = 'Wah, terima kasih banyak!';
+    this._npcLine = 'Oh, thank you so much!';
     const rt = this.world.npcRuntime(p.id);
     if (rt) this.world.emote(rt, 'heart', 3);
     this._nHTML = '';
@@ -761,13 +1035,14 @@ export class UI {
       return this.toast(r.reason, { kind: 'warn' });
     }
     this.sfx('coin');
-    this._npcLine = 'Kamu memang Kepala Desa terbaik!';
-    this.toast('Permintaan terpenuhi!', { icon: 'heart' });
+    this._npcLine = 'You really are the best Mayor!';
+    this.toast('Request fulfilled!', { icon: 'heart' });
     const rt = this.world.npcRuntime(p.id);
     if (rt) this.popup(rt.pos.clone().add(new THREE.Vector3(0, 0.8, 0)), r.reward);
     this._nHTML = '';
   }
   focusNpc(id) {
+    if (this.app.interior.active) return this.openNpc(id);
     const rt = this.world.npcRuntime(id);
     if (rt) {
       this.app.cam.focus(rt.pos, 1.6);
@@ -779,15 +1054,15 @@ export class UI {
     const g = this.game;
     const list = [...g.I.npcs].sort((a, b) => a.mood - b.mood);
     const rows = list.map((p) => {
-      const job = p.job ? BUILDINGS[g.buildingById(p.job)?.type]?.name : 'Menganggur';
+      const job = p.job ? BUILDINGS[g.buildingById(p.job)?.type]?.name : 'Unemployed';
       return `<button class="row-item" data-act="npc-goto" data-arg="${p.id}">
         <div class="face sm" style="--skin:${p.look.skin};--hair:${p.look.hair};--coat:${p.look.coat}"><i class="h"></i><i class="s"></i><i class="b"></i></div>
-        <div class="grow"><b>${esc(p.name)}</b> ${p.req ? icon('quest') : ''}<div class="muted">${esc(job || '')}${p.home ? '' : ' · tanpa rumah'}</div></div>
+        <div class="grow"><b>${esc(p.name)}</b> ${p.req ? icon('quest') : ''}<div class="muted">${esc(job || '')}${p.home ? '' : ' · homeless'}</div></div>
         <div class="mood">${icon(p.mood > 45 ? 'happy' : 'sad')}${Math.round(p.mood)}%</div></button>`;
     }).join('');
     const free = g.housingCap() - g.I.npcs.length;
     const jobsFree = g.jobsCap() - g.I.npcs.filter((p) => p.job).length;
-    this.openSheet(`${icon('people')} Warga ${esc(BIOMES[g.biome].short)}`, `<div class="summary"><span>${icon('home')} Rumah kosong: ${Math.max(0, free)}</span><span>${icon('work')} Lowongan: ${Math.max(0, jobsFree)}</span><span>${icon('happy')} ${Math.round(g.islandHappiness())}%</span></div>${rows || '<p class="muted">Belum ada warga. Bangun rumah!</p>'}`, { kind: 'citizens' });
+    this.openSheet(`${icon('people')} Villagers of ${esc(BIOMES[g.biome].short)}`, `<div class="summary"><span>${icon('home')} Free beds: ${Math.max(0, free)}</span><span>${icon('work')} Open jobs: ${Math.max(0, jobsFree)}</span><span>${icon('happy')} ${Math.round(g.islandHappiness())}%</span></div>${rows || '<p class="muted">No villagers yet. Build a house!</p>'}`, { kind: 'citizens' });
   }
 
   // ---------------------------------------------------------------- crafting
@@ -801,21 +1076,21 @@ export class UI {
       const queue = Q.map((q, i) => {
         const R = RECIPES.find((r) => r.id === q.id);
         const p = q.start > now ? 0 : Math.min(1, (now - q.start) / (q.end - q.start));
-        return `<div class="qitem ${i < slots ? '' : 'wait'}">${icon(RES[Object.keys(R.out)[0]].icon)}<div class="bar"><i style="width:${Math.round(p * 100)}%"></i></div><small>${i < slots ? Math.max(0, Math.ceil((q.end - now) / 1000)) + 'd' : 'antre'}</small></div>`;
+        return `<div class="qitem ${i < slots ? '' : 'wait'}">${icon(RES[Object.keys(R.out)[0]].icon)}<div class="bar"><i style="width:${Math.round(p * 100)}%"></i></div><small>${i < slots ? Math.max(0, Math.ceil((q.end - now) / 1000)) + 's' : 'queued'}</small></div>`;
       }).join('');
       const recipes = RECIPES.map((R) => {
         const locked = g.s.player.level < R.unlock;
         const can = !locked && slots && g.has(R.in);
         return `<div class="recipe ${locked ? 'locked' : ''}">
-          <div class="rin">${this.costHTML(R.in)}</div><span class="arrow">→</span><div class="rout">${Object.entries(R.out).map(([k, v]) => `${icon(RES[k].icon)}<b>${v}</b>`).join('')}<small>${esc(R.name)} · ${R.time}d</small></div>
-          ${locked ? `<span class="lockline">${icon('lock')} Lv ${R.unlock}</span>` : `<button class="btn sm ${can ? 'primary' : ''}" data-act="craft-do" data-arg="${R.id}" ${can ? '' : 'disabled'}>Buat</button>`}
+          <div class="rin">${this.costHTML(R.in)}</div><span class="arrow">→</span><div class="rout">${Object.entries(R.out).map(([k, v]) => `${icon(RES[k].icon)}<b>${v}</b>`).join('')}<small>${esc(R.name)} · ${R.time}s</small></div>
+          ${locked ? `<span class="lockline">${icon('lock')} Lv ${R.unlock}</span>` : `<button class="btn sm ${can ? 'primary' : ''}" data-act="craft-do" data-arg="${R.id}" ${can ? '' : 'disabled'}>Make</button>`}
         </div>`;
       }).join('');
       const T = TOOL_TIERS[g.s.player.tool], next = TOOL_TIERS[g.s.player.tool + 1];
-      const tool = `<div class="toolbox">${icon('tool', 'lg')}<div class="grow"><b>${esc(T.name)}</b><div class="muted">Hasil per ayunan: ${T.yield}</div></div>${next ? `<button class="btn" data-act="tool-up">${esc(next.name)} <span class="costs">${this.costHTML(next.cost)}</span></button>` : '<span class="muted">Terbaik!</span>'}</div>`;
-      return `${slots ? `<div class="muted">Slot pengerjaan: ${slots}</div>` : `<div class="warn">Bangun Bengkel untuk mulai membuat barang.</div>`}<div class="queue">${queue}</div>${recipes}<h3>Alat Kepala Desa</h3>${tool}`;
+      const tool = `<div class="toolbox">${icon('tool', 'lg')}<div class="grow"><b>${esc(T.name)}</b><div class="muted">Yield per swing: ${T.yield}</div></div>${next ? `<button class="btn" data-act="tool-up">${esc(next.name)} <span class="costs">${this.costHTML(next.cost)}</span></button>` : '<span class="muted">Best tool!</span>'}</div>`;
+      return `${slots ? `<div class="muted">Craft slots: ${slots}</div>` : `<div class="warn">Build a Workshop to start crafting.</div>`}<div class="queue">${queue}</div>${recipes}<h3>Mayor's Tools</h3>${tool}`;
     };
-    this.openSheet(`${icon('craft')} Kerajinan`, render(), {
+    this.openSheet(`${icon('craft')} Craft`, render(), {
       kind: 'craft',
       live: () => {
         const html = render();
@@ -844,7 +1119,7 @@ export class UI {
       return this.toast(r.reason, { kind: 'warn' });
     }
     this.sfx('levelup');
-    this.toast(`Alat baru: ${r.tool.name}!`, { icon: 'tool' });
+    this.toast(`New tool: ${r.tool.name}!`, { icon: 'tool' });
     this._cHTML = '';
   }
 
@@ -853,21 +1128,21 @@ export class UI {
   openMarket() {
     const render = () => {
       const g = this.game;
-      if (!g.hasMarket()) return `<div class="empty">${icon('market', 'xl')}<p>Bangun <b>Pasar</b> (level 3) untuk berdagang dengan pedagang dari pulau lain.</p></div>`;
-      const ev = g.s.event?.id === 'caravan' ? `<div class="banner-in">${icon('event')} Karavan Pedagang: harga jual +50%!</div>` : '';
+      if (!g.hasMarket()) return `<div class="empty">${icon('market', 'xl')}<p>Build a <b>Market</b> (level 3) to trade with merchants from other islands.</p></div>`;
+      const ev = g.s.event?.id === 'caravan' ? `<div class="banner-in">${icon('event')} Merchant Caravan: sell prices +50%!</div>` : '';
       const rows = RES_KEYS.map((k) => {
         const have = g.s.res[k];
         const sp = g.sellPrice(k), bp = g.buyPrice(k);
         const trend = g.s.market[k] < 0.85 ? 'down' : g.s.market[k] > 1.08 ? 'up' : '';
-        return `<div class="mrow">${icon(RES[k].icon)}<div class="grow"><b>${esc(RES[k].name)}</b><div class="muted">Punya ${fmt(have)}</div></div>
+        return `<div class="mrow">${icon(RES[k].icon)}<div class="grow"><b>${esc(RES[k].name)}</b><div class="muted">Owned ${fmt(have)}</div></div>
           <div class="price ${trend}">${icon('coin')}${sp}</div>
-          <button class="btn sm" data-act="sell" data-arg="${k}" data-n="1" ${have < 1 ? 'disabled' : ''}>Jual 1</button>
+          <button class="btn sm" data-act="sell" data-arg="${k}" data-n="1" ${have < 1 ? 'disabled' : ''}>Sell 1</button>
           <button class="btn sm" data-act="sell" data-arg="${k}" data-n="10" ${have < 10 ? 'disabled' : ''}>10</button>
-          <button class="btn sm buy" data-act="buy" data-arg="${k}" data-n="5" ${g.s.player.coins < bp * 5 ? 'disabled' : ''}>Beli 5 · ${bp * 5}</button></div>`;
+          <button class="btn sm buy" data-act="buy" data-arg="${k}" data-n="5" ${g.s.player.coins < bp * 5 ? 'disabled' : ''}>Buy 5 · ${bp * 5}</button></div>`;
       }).join('');
-      return `${ev}<p class="muted">Harga turun saat kamu menjual banyak dan pulih perlahan setiap jam.</p>${rows}`;
+      return `${ev}<p class="muted">Prices drop when you sell a lot and recover slowly every hour.</p>${rows}`;
     };
-    this.openSheet(`${icon('market')} Pasar`, render(), {
+    this.openSheet(`${icon('market')} Market`, render(), {
       kind: 'market',
       live: () => {
         const html = render();
@@ -883,7 +1158,7 @@ export class UI {
     const got = this.game.sell(r, n);
     if (got) {
       this.sfx('coin');
-      this.toast(`Terjual ${n} ${RES[r].name}: +${got} koin`, { icon: 'coin', ms: 1400 });
+      this.toast(`Sold ${n} ${RES[r].name}: +${got} coins`, { icon: 'coin', ms: 1400 });
     }
   }
   doBuy(r, n) {
@@ -901,7 +1176,7 @@ export class UI {
     const render = () => {
       const g = this.game;
       const qs = g.activeQuests();
-      if (!qs.length) return `<div class="empty">${icon('trophy', 'xl')}<p>Semua misi selesai. Kamu luar biasa!</p></div>`;
+      if (!qs.length) return `<div class="empty">${icon('trophy', 'xl')}<p>All quests complete. You're amazing!</p></div>`;
       return qs.map((q) => {
         const done = g.questDone(q);
         const goals = q.goals.map((gl) => {
@@ -909,10 +1184,10 @@ export class UI {
           return `<div class="goal"><div class="bar"><i style="width:${Math.min(100, Math.round((a / b) * 100))}%"></i></div><small>${fmt(Math.min(a, b))}/${fmt(b)}</small></div>`;
         }).join('');
         return `<div class="quest ${done ? 'done' : ''}"><div class="grow"><b>${esc(q.title)}</b><p>${esc(q.desc)}</p>${goals}<div class="costs">${this.costHTML(q.reward)}</div></div>
-          ${done ? `<button class="btn primary" data-act="quest-claim" data-arg="${q.id}">Klaim</button>` : ''}</div>`;
-      }).join('') + `<p class="muted">${g.s.quests.done.length}/${QUESTS.length} misi selesai</p>`;
+          ${done ? `<button class="btn primary" data-act="quest-claim" data-arg="${q.id}">Claim</button>` : ''}</div>`;
+      }).join('') + `<p class="muted">${g.s.quests.done.length}/${QUESTS.length} quests done</p>`;
     };
-    this.openSheet(`${icon('quest')} Misi`, render(), {
+    this.openSheet(`${icon('quest')} Quests`, render(), {
       kind: 'quests',
       live: () => {
         const html = render();
@@ -930,7 +1205,7 @@ export class UI {
     this.sfx('quest');
     buzz('medium');
     const q = QUESTS.find((x) => x.id === id);
-    this.queueModal(() => this.modal(`<div class="burst"></div><h2>Misi Selesai!</h2><p>${esc(q.title)}</p>${this.rewardHTML(got)}<button class="btn primary big" data-act="modal-ok">Hore!</button>`, { cls: 'celebrate' }));
+    this.queueModal(() => this.modal(`<div class="burst"></div><h2>Quest Complete!</h2><p>${esc(q.title)}</p>${this.rewardHTML(got)}<button class="btn primary big" data-act="modal-ok">Hooray!</button>`, { cls: 'celebrate' }));
   }
 
   openAchievements() {
@@ -939,9 +1214,9 @@ export class UI {
     const html = ACHIEVEMENTS.map((a) => {
       const v = g.statValue(a.stat);
       const done = !!g.s.ach[a.id];
-      return `<div class="ach ${done ? 'done' : ''}">${icon(done ? 'trophy' : 'lock', 'lg')}<div class="grow"><b>${esc(a.name)}</b><p>${esc(a.desc)}</p>${done ? '' : `<div class="bar"><i style="width:${Math.min(100, Math.round((v / a.n) * 100))}%"></i></div>`}${a.unlocks ? `<small class="muted">Membuka: ${esc(a.unlocks)}</small>` : ''}</div><div class="costs">${this.costHTML(a.reward)}</div></div>`;
+      return `<div class="ach ${done ? 'done' : ''}">${icon(done ? 'trophy' : 'lock', 'lg')}<div class="grow"><b>${esc(a.name)}</b><p>${esc(a.desc)}</p>${done ? '' : `<div class="bar"><i style="width:${Math.min(100, Math.round((v / a.n) * 100))}%"></i></div>`}${a.unlocks ? `<small class="muted">Unlocks: ${esc(a.unlocks)}</small>` : ''}</div><div class="costs">${this.costHTML(a.reward)}</div></div>`;
     }).join('');
-    this.openSheet(`${icon('trophy')} Prestasi ${got}/${ACHIEVEMENTS.length}`, html, { kind: 'ach' });
+    this.openSheet(`${icon('trophy')} Achievements ${got}/${ACHIEVEMENTS.length}`, html, { kind: 'ach' });
   }
 
   openDaily() {
@@ -951,10 +1226,10 @@ export class UI {
       const streak = st.available ? st.streak : g.s.daily.streak;
       const pos = ((streak - 1) % 7) + 1;
       const cls = d < pos || (!st.available && d === pos) ? 'got' : d === pos && st.available ? 'today' : '';
-      return `<div class="day ${cls}"><small>Hari ${d}</small>${icon(d === 7 ? 'chest' : 'gift', 'lg')}</div>`;
+      return `<div class="day ${cls}"><small>Day ${d}</small>${icon(d === 7 ? 'chest' : 'gift', 'lg')}</div>`;
     }).join('');
-    this.openSheet(`${icon('calendar')} Hadiah Harian`, `<div class="days">${days}</div>
-      ${st.available ? `<p>Hadiah hari ini (beruntun ${st.streak} hari):</p>${this.rewardHTML(st.reward)}<button class="btn primary big" data-act="daily-claim">Ambil Hadiah</button>` : `<p class="muted">Sudah diambil hari ini. Kembali besok untuk menjaga rantai ${g.s.daily.streak} hari!</p>`}`, { kind: 'daily' });
+    this.openSheet(`${icon('calendar')} Daily Reward`, `<div class="days">${days}</div>
+      ${st.available ? `<p>Today's reward (${st.streak}-day streak):</p>${this.rewardHTML(st.reward)}<button class="btn primary big" data-act="daily-claim">Claim</button>` : `<p class="muted">Already claimed today. Come back tomorrow to keep your ${g.s.daily.streak}-day streak!</p>`}`, { kind: 'daily' });
   }
   claimDaily() {
     const r = this.game.claimDaily();
@@ -963,7 +1238,7 @@ export class UI {
     this.sfx('sparkle');
     this.sfx('coin');
     buzz('medium');
-    this.queueModal(() => this.modal(`<div class="burst"></div><h2>Hadiah Hari ke-${r.streak}</h2>${this.rewardHTML(r.got)}<button class="btn primary big" data-act="modal-ok">Terima kasih!</button>`, { cls: 'celebrate' }));
+    this.queueModal(() => this.modal(`<div class="burst"></div><h2>Day ${r.streak} Reward</h2>${this.rewardHTML(r.got)}<button class="btn primary big" data-act="modal-ok">Thanks!</button>`, { cls: 'celebrate' }));
   }
 
   // ---------------------------------------------------------------- map
@@ -976,13 +1251,13 @@ export class UI {
       const I = g.s.islands[id];
       const cur = id === g.biome;
       let action = '';
-      if (cur) action = `<span class="pill on">Kamu di sini</span>`;
-      else if (st.open) action = `<button class="btn primary" data-act="island-go" data-arg="${id}">Kunjungi</button>`;
+      if (cur) action = `<span class="pill on">You are here</span>`;
+      else if (st.open) action = `<button class="btn primary" data-act="island-go" data-arg="${id}">Visit</button>`;
       else if (st.reason) action = `<span class="lockline">${icon('lock')} ${esc(st.reason)}</span>`;
-      else action = `<button class="btn ${st.canBuy ? 'primary' : ''}" data-act="island-buy" data-arg="${id}" ${st.canBuy ? '' : 'disabled'}>Buka ${icon('coin')}${fmt(B.cost)}</button>`;
-      return `<div class="island ${st.open ? '' : 'locked'} ${cur ? 'cur' : ''}"><div class="swatch" style="--c:${B.color}"></div><div class="grow"><b>${esc(B.name)}</b><p>${esc(B.desc)}</p>${I ? `<small class="muted">${icon('pop')} ${I.npcs.length} warga · ${I.buildings.length} bangunan</small>` : ''}</div>${action}</div>`;
+      else action = `<button class="btn ${st.canBuy ? 'primary' : ''}" data-act="island-buy" data-arg="${id}" ${st.canBuy ? '' : 'disabled'}>Unlock ${icon('coin')}${fmt(B.cost)}</button>`;
+      return `<div class="island ${st.open ? '' : 'locked'} ${cur ? 'cur' : ''}"><div class="swatch" style="--c:${B.color}"></div><div class="grow"><b>${esc(B.name)}</b><p>${esc(B.desc)}</p>${I ? `<small class="muted">${icon('pop')} ${I.npcs.length} villagers · ${I.buildings.length} buildings</small>` : ''}</div>${action}</div>`;
     }).join('');
-    this.openSheet(`${icon('map')} Peta Kepulauan`, cards, { kind: 'map' });
+    this.openSheet(`${icon('map')} Island Map`, cards, { kind: 'map' });
   }
   goIsland(id) {
     this.closeSheet();
@@ -997,7 +1272,7 @@ export class UI {
     this.sfx('levelup');
     buzz('heavy');
     this.closeSheet();
-    this.queueModal(() => this.modal(`<div class="burst"></div><h2>Pulau Baru!</h2><p><b>${esc(BIOMES[id].name)}</b> kini terbuka.</p><p class="muted">${esc(BIOMES[id].desc)}</p><button class="btn primary big" data-act="modal-ok">Berangkat!</button>`, { cls: 'celebrate', onClose: () => this.app.travel(id) }));
+    this.queueModal(() => this.modal(`<div class="burst"></div><h2>New Island!</h2><p><b>${esc(BIOMES[id].name)}</b> is now open.</p><p class="muted">${esc(BIOMES[id].desc)}</p><button class="btn primary big" data-act="modal-ok">Set sail!</button>`, { cls: 'celebrate', onClose: () => this.app.travel(id) }));
   }
 
   // ---------------------------------------------------------------- profile, inventory, event
@@ -1006,18 +1281,18 @@ export class UI {
     const g = this.game, P = g.s.player, S = g.s.stats;
     const need = xpForLevel(P.level);
     const next = Object.entries(BUILDINGS).filter(([, d]) => d.unlock > P.level && d.unlock < 99).sort((a, b) => a[1].unlock - b[1].unlock).slice(0, 4);
-    this.openSheet(`${icon('star')} Kepala Desa · Level ${P.level}`, `
+    this.openSheet(`${icon('star')} Mayor · Level ${P.level}`, `
       <div class="goal"><div class="bar xp"><i style="width:${Math.round((P.xp / need) * 100)}%"></i></div><small>${fmt(P.xp)}/${fmt(need)} XP</small></div>
       <div class="statgrid">
-        <div>${icon('build')}<b>${fmt(S.built)}</b><small>dibangun</small></div>
-        <div>${icon('wood')}<b>${fmt(S.gathered)}</b><small>dikumpulkan</small></div>
-        <div>${icon('craft')}<b>${fmt(S.crafted)}</b><small>dibuat</small></div>
-        <div>${icon('coin')}<b>${fmt(S.sold)}</b><small>dijual</small></div>
-        <div>${icon('pop')}<b>${fmt(g.population())}</b><small>warga</small></div>
-        <div>${icon('calendar')}<b>${fmt(g.s.time.day)}</b><small>hari</small></div>
+        <div>${icon('build')}<b>${fmt(S.built)}</b><small>built</small></div>
+        <div>${icon('wood')}<b>${fmt(S.gathered)}</b><small>gathered</small></div>
+        <div>${icon('craft')}<b>${fmt(S.crafted)}</b><small>crafted</small></div>
+        <div>${icon('coin')}<b>${fmt(S.sold)}</b><small>sold</small></div>
+        <div>${icon('pop')}<b>${fmt(g.population())}</b><small>villagers</small></div>
+        <div>${icon('calendar')}<b>${fmt(g.s.time.day)}</b><small>days</small></div>
       </div>
-      <h3>Segera terbuka</h3>
-      <div class="names">${next.map(([, d]) => `<span class="pill">${icon('lock')} ${esc(d.name)} · Lv ${d.unlock}</span>`).join('') || '<span class="muted">Semua bangunan terbuka!</span>'}</div>
+      <h3>Coming soon</h3>
+      <div class="names">${next.map(([, d]) => `<span class="pill">${icon('lock')} ${esc(d.name)} · Lv ${d.unlock}</span>`).join('') || '<span class="muted">All buildings unlocked!</span>'}</div>
       <h3>Tips</h3><p class="muted">${esc(TIPS[(g.s.time.day + P.level) % TIPS.length])}</p>`, { kind: 'profile' });
   }
 
@@ -1025,14 +1300,31 @@ export class UI {
     const g = this.game;
     const cap = g.storageCap();
     const rows = RES_KEYS.map((k) => `<div class="mrow">${icon(RES[k].icon)}<div class="grow"><b>${esc(RES[k].name)}</b><div class="bar"><i style="width:${Math.min(100, (g.s.res[k] / cap) * 100)}%"></i></div></div><b>${fmt(g.s.res[k])}</b></div>`).join('');
-    this.openSheet(`${icon('storage')} Gudang · kapasitas ${fmt(cap)}`, `<p class="muted">Bangun Gudang untuk menambah kapasitas tiap sumber daya.</p>${rows}`, { kind: 'inv' });
+    this.openSheet(`${icon('storage')} Storage · capacity ${fmt(cap)}`, `<p class="muted">Build a Storage to raise the capacity for each resource.</p>${rows}`, { kind: 'inv' });
   }
 
   openEventInfo() {
-    const ev = this.game.s.event;
+    const g = this.game;
+    const ev = g.s.event;
     if (!ev) return;
     const def = EVENTS.find((e) => e.id === ev.id);
-    this.openSheet(`${icon('event')} ${esc(def.name)}`, `<p>${esc(def.desc)}</p>`, { kind: 'event' });
+    const bad = def.kind === 'bad';
+    const left = Math.max(0, ev.until - g.absHour());
+    const pills = (def.effect || []).map((e) => `<span class="pill ${bad ? '' : 'on'}">${esc(e)}</span>`).join('');
+    let prog = '';
+    if (ev.props?.length) prog = `<p><b>Found ${ev.found || 0} of ${ev.props.length}</b></p>`;
+    if (ev.sick) prog = `<p><b>${ev.sick.length} of ${ev.total} villagers still sick</b></p>`;
+    if (ev.host) prog += `<p class="muted">${ev.host.met ? 'You already greeted the guest.' : 'You have not greeted the guest yet.'}</p>`;
+    if (ev.id === 'birthday') {
+      const p = g.I.npcs.find((q) => q.id === ev.npc);
+      if (p) prog = `<p><b>Birthday: ${esc(p.name)}</b>${ev.gifted ? ' · present given' : ''}</p>`;
+    }
+    if (ev.id === 'royal') prog += `<p>Happiness now: <b>${Math.round(g.islandHappiness())}%</b> (needs 60%)</p>`;
+    this.openSheet(
+      `${icon(def.icon || 'event')} ${esc(def.name)}`,
+      `<p>${esc(def.flavor || def.desc)}</p><div class="names">${pills}</div>${prog}${def.tip ? `<p class="muted">${icon('info')} ${esc(def.tip)}</p>` : ''}<p class="muted">${icon('event')} ${Math.floor(left)}h ${pad2((left % 1) * 60)}m left</p>`,
+      { kind: 'event' },
+    );
   }
 
   // ---------------------------------------------------------------- settings & credits
@@ -1041,18 +1333,18 @@ export class UI {
     const S = this.game.s.settings;
     const opt = (key, v, label) => `<button class="seg ${String(S[key]) === String(v) ? 'on' : ''}" data-act="set" data-arg="${key}" data-v="${v}">${label}</button>`;
     const html = `
-      <div class="setting"><span>${icon('sound')} Suara</span><div class="segs">${opt('sound', true, 'Nyala')}${opt('sound', false, 'Mati')}</div></div>
-      <div class="setting"><span>${icon('music')} Musik</span><div class="segs">${opt('music', true, 'Nyala')}${opt('music', false, 'Mati')}</div></div>
-      <div class="setting"><span>Volume suasana</span><div class="segs">${opt('volume', 0.3, 'Pelan')}${opt('volume', 0.7, 'Sedang')}${opt('volume', 1, 'Keras')}</div></div>
-      <div class="setting"><span>Volume efek</span><div class="segs">${opt('sfx', 0.4, 'Pelan')}${opt('sfx', 0.9, 'Sedang')}${opt('sfx', 1.4, 'Keras')}</div></div>
-      <div class="setting"><span>Kualitas grafis</span><div class="segs">${opt('quality', 'auto', 'Otomatis')}${opt('quality', 'low', 'Rendah')}${opt('quality', 'medium', 'Sedang')}${opt('quality', 'high', 'Tinggi')}</div></div>
-      <div class="setting"><span>Ukuran piksel</span><div class="segs">${opt('pixel', 0.75, 'Halus')}${opt('pixel', 1, 'Sedang')}${opt('pixel', 1.4, 'Kasar')}</div></div>
-      <div class="setting"><span>Kecepatan waktu</span><div class="segs">${opt('speed', 1, '1x')}${opt('speed', 2, '2x')}${opt('speed', 3, '3x')}</div></div>
-      <div class="setting"><span>Getar</span><div class="segs">${opt('haptics', true, 'Nyala')}${opt('haptics', false, 'Mati')}</div></div>
-      <div class="setting"><span>Tampilkan FPS</span><div class="segs">${opt('fps', true, 'Ya')}${opt('fps', false, 'Tidak')}</div></div>
-      <div class="btns"><button class="btn" data-act="credits">${icon('info')} Kredit & Lisensi</button><button class="btn danger" data-act="wipe">${icon('trash')} Hapus Data</button></div>
-      <p class="muted center">Pixel Diorama: World Builder v${this.app.version} · Game sepenuhnya offline, tanpa iklan, tanpa pembelian dalam aplikasi.</p>`;
-    this.openSheet(`${icon('gear')} Pengaturan`, html, { kind: 'settings' });
+      <div class="setting"><span>${icon('sound')} Sound</span><div class="segs">${opt('sound', true, 'On')}${opt('sound', false, 'Off')}</div></div>
+      <div class="setting"><span>${icon('music')} Music</span><div class="segs">${opt('music', true, 'On')}${opt('music', false, 'Off')}</div></div>
+      <div class="setting"><span>Ambience volume</span><div class="segs">${opt('volume', 0.3, 'Low')}${opt('volume', 0.7, 'Medium')}${opt('volume', 1, 'High')}</div></div>
+      <div class="setting"><span>Effects volume</span><div class="segs">${opt('sfx', 0.4, 'Low')}${opt('sfx', 0.9, 'Medium')}${opt('sfx', 1.4, 'High')}</div></div>
+      <div class="setting"><span>Graphics quality</span><div class="segs">${opt('quality', 'auto', 'Auto')}${opt('quality', 'low', 'Low')}${opt('quality', 'medium', 'Medium')}${opt('quality', 'high', 'High')}</div></div>
+      <div class="setting"><span>Pixel size</span><div class="segs">${opt('pixel', 0.75, 'Fine')}${opt('pixel', 1, 'Medium')}${opt('pixel', 1.4, 'Chunky')}</div></div>
+      <div class="setting"><span>Game speed</span><div class="segs">${opt('speed', 1, '1x')}${opt('speed', 2, '2x')}${opt('speed', 3, '3x')}</div></div>
+      <div class="setting"><span>Vibration</span><div class="segs">${opt('haptics', true, 'On')}${opt('haptics', false, 'Off')}</div></div>
+      <div class="setting"><span>Show FPS</span><div class="segs">${opt('fps', true, 'Yes')}${opt('fps', false, 'No')}</div></div>
+      <div class="btns"><button class="btn" data-act="credits">${icon('info')} Credits & Licenses</button><button class="btn danger" data-act="wipe">${icon('trash')} Delete Data</button></div>
+      <p class="muted center">Pixel Diorama: World Builder v${this.app.version} · Fully offline. No ads, no in-app purchases.</p>`;
+    this.openSheet(`${icon('gear')} Settings`, html, { kind: 'settings' });
   }
 
   changeSetting(key, raw) {
@@ -1064,27 +1356,31 @@ export class UI {
   }
 
   openCredits() {
-    this.openSheet(`${icon('info')} Kredit & Lisensi`, `
+    this.openSheet(`${icon('info')} Credits & Licenses`, `
       <div class="credits">
         <h3>Pixel Diorama: World Builder</h3>
-        <p>© 2026 F7 Developer. Semua hak dilindungi.</p>
-        <h3>Mesin grafis & suara</h3>
-        <p>Renderer pixel-art, siklus siang-malam, cuaca, material, dan audio prosedural dikembangkan dari <b>noxe-pixel-engine</b> karya Daniel Jankulovski, dirilis dengan lisensi MIT.<br><small>github.com/danieljan-design/noxe-pixel-engine</small></p>
+        <p>© 2026 F7 Developer. All rights reserved.</p>
+        <h3>Graphics & sound engine</h3>
+        <p>The pixel-art renderer, day-night cycle, weather, materials and procedural audio are built on <b>noxe-pixel-engine</b> by Daniel Jankulovski, released under the MIT license.<br><small>github.com/danieljan-design/noxe-pixel-engine</small></p>
         <pre>${esc(NOXE_LICENSE)}</pre>
-        <h3>Pustaka sumber terbuka</h3>
-        <p><b>three.js</b> © 2010-2026 three.js authors, lisensi MIT.<br><b>Capacitor</b> © Ionic, lisensi MIT.</p>
-        <p class="muted">Semua model, ikon, dan suara dalam game ini dibuat secara prosedural oleh kode. Tidak ada aset pihak ketiga.</p>
+        <h3>Open source libraries</h3>
+        <p><b>three.js</b> © 2010-2026 three.js authors, MIT license.<br><b>Capacitor</b> © Ionic, MIT license.</p>
+        <p class="muted">All models, icons and sounds in this game are generated procedurally by code. No third-party assets.</p>
       </div>`, { kind: 'credits' });
   }
 
   confirmWipe() {
-    this.confirm('Hapus semua data?', 'Seluruh pulau, warga, dan kemajuan akan hilang selamanya. Tindakan ini tidak bisa dibatalkan.', 'Hapus', () => this.app.wipe());
+    this.confirm('Delete all data?', 'All islands, villagers and progress will be lost forever. This cannot be undone.', 'Delete', () => this.app.wipe());
   }
 
   // ---------------------------------------------------------------- follow & hints
 
   toggleFollow() {
     const cam = this.app.cam;
+    if (this.app.interior.active) {
+      cam.goal.target.set(0, 0.3, 0);
+      return;
+    }
     if (cam.follow) cam.follow = null;
     else {
       cam.follow = () => this.world.mayor.pos;
@@ -1108,13 +1404,14 @@ export class UI {
   /** Step-by-step first-run guidance, driven by what the player has done. */
   tutorial() {
     const g = this.game, s = g.s;
+    if (this.app.interior.active) return;
     if (this.mode !== 'explore' || (s.tutorialSkip || 0) > 0 && s.tutorial >= 99) return;
     const steps = [
-      { done: () => s.stats.gathered >= 1, text: 'Selamat datang, Kepala Desa! Ketuk pohon atau batu agar kamu mengumpulkannya.' },
-      { done: () => g.countType('rumah') >= 1, text: 'Hebat! Buka menu Bangun di bawah dan dirikan sebuah Rumah.' },
-      { done: () => g.countType('ladang') >= 1, text: 'Warga butuh makan. Bangun Ladang (kategori Produksi).' },
-      { done: () => s.quests.done.length >= 1, text: 'Lihat Misi di sisi kanan. Selesaikan misi untuk hadiah besar!' },
-      { done: () => s.stats.talked >= 1, text: 'Ketuk seorang warga untuk mengobrol dan melihat kebutuhannya.' },
+      { done: () => s.stats.gathered >= 1, text: 'Welcome, Mayor! Tap a tree or rock to gather it.' },
+      { done: () => g.countType('rumah') >= 1, text: 'Great! Open the Build menu below and put up a House.' },
+      { done: () => g.countType('ladang') >= 1, text: 'Villagers need food. Build a Farm (Production tab).' },
+      { done: () => s.quests.done.length >= 1, text: 'Check Quests on the right. Finish them for big rewards!' },
+      { done: () => s.stats.talked >= 1, text: 'Tap a villager to chat and see what they need.' },
     ];
     while (s.tutorial < steps.length && steps[s.tutorial].done()) s.tutorial++;
     if (s.tutorial >= steps.length) {
