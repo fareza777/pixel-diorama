@@ -9,6 +9,7 @@ import { buildingModel, nodeGeometry, materialFor, disposeModel, Builder } from 
 import { Crowd, GATHER_ANIMS, randomLook } from './people.js';
 import { Ambient } from './ambient.js';
 import { findPath } from './path.js';
+import { FireFx } from './fire.js';
 import { footprint, WALKABLE_BUILDINGS, SECONDS_PER_GAME_HOUR } from './game.js';
 
 const BASE = -2.6;
@@ -35,9 +36,11 @@ const WORK_ANIM = {
   pasar: { anim: 'vend', alt: 'talk' }, toko: { anim: 'vend', alt: 'sweep' }, kedai: { anim: 'cook', alt: 'vend' },
   sekolah: { anim: 'talk', alt: 'point' }, perpustakaan: { anim: 'sweep', alt: 'point' }, klinik: { anim: 'talk', alt: 'work' },
   panggung: { anim: 'dance', alt: 'clap' }, gudang: { anim: 'work', alt: 'sweep' }, kincir: { anim: 'work' },
+  pemadam: { anim: 'sweep', alt: 'work' }, roti: { anim: 'cook', alt: 'vend' }, lab: { anim: 'work', alt: 'point' },
+  pelabuhan: { anim: 'hammer', alt: 'point' }, bank: { anim: 'vend', alt: 'talk' }, museum: { anim: 'sweep', alt: 'talk' },
 };
 // porters carry a crate on the way to these jobs
-const CARRY_TO = new Set(['gudang', 'pasar', 'toko', 'kedai', 'penggergajian', 'bengkel', 'kebun']);
+const CARRY_TO = new Set(['gudang', 'pasar', 'toko', 'kedai', 'penggergajian', 'bengkel', 'kebun', 'roti', 'pelabuhan']);
 // particles when a villager's tool lands: [colour, count, glow, height, reach]
 const HIT_FX = {
   chop: ['#c9a070', 2, 1, 0.22, 0.34], mine: ['#c9ccd4', 2, 1, 0.2, 0.36], dig: ['#d8b98a', 3, 1, 0.05, 0.33], hoe: ['#8e6444', 3, 1, 0.04, 0.4],
@@ -56,6 +59,11 @@ const WORK_FX = {
   sekolah: { p: [-0.1, 1.0, -0.45], rate: 0.4, o: { n: 1, color: '#ffe08a', speed: 0.1, up: 0.5, life: 1.2, gravity: -0.3, glow: 2 } },
   panggung: { p: [0, 0.7, -0.15], rate: 1.6, o: { n: 1, color: '#ff8ad8', speed: 0.3, up: 0.6, life: 1.5, gravity: -0.35, glow: 2.6, spread: 0.6 } },
   ladang: { p: [0, 0.3, 0], rate: 0.6, o: { n: 1, color: '#9ccf5a', speed: 0.3, up: 0.6, life: 0.9, gravity: 1, spread: 1.4 } },
+  roti: { p: [-0.12, 0.2, 0.25], rate: 1, o: { n: 1, color: '#fff2dc', speed: 0.05, up: 0.35, life: 1.4, gravity: -0.35 } },
+  lab: { p: [0.22, 0.24, 0.32], rate: 2, o: { n: 1, color: '#8af4ff', speed: 0.15, up: 0.5, life: 1, gravity: -0.4, glow: 3, spread: 0.2 } },
+  bank: { p: [0, 0.4, 0.3], rate: 0.5, o: { n: 2, color: '#ffd23d', speed: 0.35, up: 0.9, life: 0.7, glow: 2.5 } },
+  museum: { p: [0, 1.3, -0.3], rate: 0.5, o: { n: 1, color: '#ffe08a', speed: 0.2, up: 0.5, life: 1.2, gravity: -0.3, glow: 2.2, spread: 0.6 } },
+  pelabuhan: { p: [0.68, 0.5, 0.56], rate: 0.8, o: { n: 2, color: '#c9a070', speed: 0.4, up: 0.5, life: 0.5, gravity: 3 } },
 };
 const NOTE_COL = ['#ff8ad8', '#ffd23d', '#7fe08a', '#86b8e8', '#c9a0ff'];
 const BUILDER_LOOK = (r) => ({ ...randomLook(r), coat: '#e8913a', pants: '#3a4a6a', hat: '#ffd23d', tool: '#8a5a38', toolHead: '#9aa0aa' });
@@ -297,6 +305,7 @@ export class World {
     this.ambient.setLevel(this.quality.ambient);
     this.root.add(this.ambient.group);
     this.ambient.attach();
+    this.fire = new FireFx(this);
 
     const B = BIOMES[biome];
     const maxH = Math.max(...I.h);
@@ -318,6 +327,8 @@ export class World {
 
   dispose() {
     if (!this.scene) return;
+    this.fire?.dispose();
+    this.fire = null;
     for (const b of this.buildings.values()) {
       disposeModel(b.group);
       if (b.scaffold) disposeModel(b.scaffold);
@@ -676,7 +687,7 @@ export class World {
     const entry = { rec, group, anim: [], center: new THREE.Vector3(cx, h, cz), smoke: [] };
     group.traverse((o) => {
       const u = o.userData;
-      if (u.spin || u.clock || u.bob || u.pulse || u.float || u.flag || u.swing || u.seesaw) {
+      if (u.spin || u.clock || u.bob || u.pulse || u.float || u.flag || u.swing || u.seesaw || u.ship) {
         u.y0 = o.position.y;
         u.ph = Math.random() * 10;
         entry.anim.push(o);
@@ -690,6 +701,8 @@ export class World {
       this._makeScaffold(entry, s);
       group.scale.set(1, 0.02, 1);
     }
+    // burnt down: charred and slumped until it is repaired
+    if (rec.ruin) FireFx.char(group);
     this.root.add(group);
     this.buildings.set(rec.id, entry);
     // chimney smoke
@@ -821,9 +834,31 @@ export class World {
     this.removeBuilding(rec, false);
     const n = this.addBuilding(rec);
     if (!rec.built) n.group.scale.y = progress;
-    else n.pop = 0;
+    else if (!rec.ruin) n.pop = 0;
     if (rec.built) this.bursts.emit(n.center.clone().add(new THREE.Vector3(0, 0.5, 0)), { n: 18, color: '#ffe08a', speed: 1, up: 1.6, life: 0.8, glow: 2 });
     if (this.selected?.id === rec.id) this.select(rec);
+  }
+
+  /** Every Harbor's ship sails off with a delivered order and comes back a little later. */
+  sailShips() {
+    for (const e of this.buildings.values()) if (e.rec.type === 'pelabuhan' && e.rec.built && e.sailT === undefined) e.sailT = 0;
+  }
+
+  /** Send the Mayor to put out the fire on a building. */
+  mayorFight(rec) {
+    const m = this.mayor;
+    const tile = this.doorTile(rec) || this._nearbyFree([rec.i, rec.j], 2);
+    m.task = { kind: 'fire', bid: rec.id };
+    const [ci, cj] = tileAt(m.pos.x, m.pos.z);
+    const s = BUILDINGS[rec.type].size;
+    if (ci >= rec.i - 1 && ci <= rec.i + s && cj >= rec.j - 1 && cj <= rec.j + s) {
+      m.path = null;
+      m.mode = 'task';
+      return true;
+    }
+    if (!tile) return false;
+    this._mayorPath(tile);
+    return !!m.task;
   }
 
   buildingCenter(rec) {
@@ -1311,7 +1346,12 @@ export class World {
       rt.pos.x += (dx / d) * step;
       rt.pos.z += (dz / d) * step;
     }
-    if (d > 1e-4) rt.yaw = Math.atan2(-dz, dx);
+    if (d > 1e-4) {
+      // turn smoothly into the new direction instead of snapping
+      const ty = Math.atan2(-dz, dx);
+      const da = Math.atan2(Math.sin(ty - (rt.yaw ?? ty)), Math.cos(ty - (rt.yaw ?? ty)));
+      rt.yaw = (rt.yaw ?? ty) + da * Math.min(1, dt * 14);
+    }
     const k = rt.seg ? 1 - Math.min(1, d / rt.seg.len) : 1;
     rt.pos.y = rt.seg ? rt.seg.h0 + (rt.seg.h1 - rt.seg.h0) * smooth(0.25, 0.75, k) : this.tileH(ti, tj);
     rt.phase += step * 11;
@@ -1511,6 +1551,10 @@ export class World {
       const t = m.task;
       if (t.kind === 'gather') {
         this._updateGather(m, t, dt);
+        return;
+      }
+      if (t.kind === 'fire') {
+        this.fire?.mayorSpray(m, t, dt);
         return;
       }
       if (t.kind === 'chest' || t.kind === 'cat' || t.kind === 'visitor') {
@@ -2623,6 +2667,33 @@ export class World {
         }
         if (u.swing) o.rotation.z = Math.sin(this.time * 2.3 + u.swing * 1.7) * 0.5;
         if (u.seesaw) o.rotation.z = Math.sin(this.time * 1.4 + u.ph) * 0.22;
+        if (u.ship) {
+          // bob on the swell; with a delivered order, sail off along the coast and come back
+          u.x0 ??= o.position.x;
+          o.position.y = u.y0 + Math.sin(this.time * 1.6 + u.ph) * 0.02;
+          o.rotation.x = Math.sin(this.time * 1.1 + u.ph) * 0.04;
+          o.rotation.z = Math.sin(this.time * 0.8 + u.ph) * 0.03;
+          if (e.sailT !== undefined) {
+            e.sailT += dt;
+            const t = e.sailT;
+            const easeIn = (k) => k * k * k, easeOut = (k) => 1 - Math.pow(1 - k, 3);
+            if (t < 5) o.position.x = u.x0 + easeIn(t / 5) * 4.5;
+            else if (t < 9) o.visible = false;
+            else if (t < 14) {
+              o.visible = true;
+              o.position.x = u.x0 - (1 - easeOut((t - 9) / 5)) * 4.5;
+            } else {
+              o.position.x = u.x0;
+              o.visible = true;
+              e.sailT = undefined;
+            }
+            if (t < 0.1) this.audio.play('horn', { pitch: 0.6, dur: 1.8 });
+            if (t > 0.3 && t < 5 && Math.random() < dt * 6) {
+              const wp = o.getWorldPosition(_tmpV);
+              this.bursts.emit(wp.setY(0.05), { n: 1, color: '#e6f6ff', speed: 0.2, up: 0.3, life: 0.8, gravity: 1, spread: 0.3 });
+            }
+          }
+        }
         if (o.userData.bob) o.scale.y = 1 + Math.sin(this.time * 6) * 0.15;
         if (o.userData.pulse) o.scale.setScalar(1 + ((this.time * 1.5) % 1) * 0.6);
         if (o.userData.clock) {
@@ -2639,6 +2710,7 @@ export class World {
     const raining = env.cur.rain > 0.25 || env.cur.snow > 0.4;
     const quake = g.evFx().quake;
     this._cold = env.cur.snow > 0.3 || (this._sb[3] > 0.5 && SEASON_LOOK[this.biome]?.snow > 0) || g.evFx().burnWood;
+    const mayorWalking = this.mayor?.mode === 'walk';
     for (const rt of this.npcs.values()) {
       rt.think -= dt;
       if (rt.think <= 0) {
@@ -2671,6 +2743,17 @@ export class World {
           else if (rt.p.mood < 30) this.emote(rt, 'sad');
           else if (rt.mode === 'dance') this.emote(rt, 'music', 2);
           else if (rt.mode === 'leisure' && rt.p.mood > 70) this.emote(rt, 'heart', 2);
+        }
+      }
+      // villagers wave when the Mayor walks past
+      if (mayorWalking && rt.visible && (rt.mode === 'leisure' || rt.mode === 'idle') && !(rt.chat > this.time) && (rt.waveCd || 0) < this.time) {
+        const dx = rt.pos.x - this.mayor.pos.x, dz = rt.pos.z - this.mayor.pos.z;
+        if (dx * dx + dz * dz < 1.3) {
+          rt.waveCd = this.time + 25 + Math.random() * 20;
+          rt.fid = { a: 'wave', until: this.time + 1.8 };
+          rt.fidT = 1.8;
+          this._face(rt, this.mayor.pos);
+          if ((rt.p.friend || 0) > 30) this.emote(rt, 'heart', 1.6);
         }
       }
     }
@@ -2757,6 +2840,7 @@ export class World {
     if (this._loopBase?.traffic) this.audio.setLoop('traffic', this._loopBase.traffic * (0.35 + 0.65 * env.daylight));
     if (this._loopBase?.cicadas) this.audio.setLoop('cicadas', this._loopBase.cicadas * env.daylight * (1 - env.cur.rain));
     if (festival) this.audio.setLoop('fire', 0);
+    this.fire?.update(dt);
 
     if (this._grassDirty) {
       this._grassAcc = (this._grassAcc || 0) + dt;
@@ -2852,7 +2936,7 @@ export class World {
     const h = this.game.s.time.hour;
     for (const e of this.buildings.values()) {
       const W = WORK_FX[e.rec.type];
-      if (!W || !e.rec.built || e.dyingSoon) continue;
+      if (!W || !e.rec.built || e.dyingSoon || e.rec.ruin || e.rec.fire) continue;
       let workers = this.presence.get(e.rec.id) || 0;
       if (e.rec.type === 'panggung' && h >= 17 && h < 22) workers = Math.max(workers, 2);
       if (!workers || e.rec.stalled) continue;
@@ -3027,6 +3111,7 @@ export class World {
   /** Visible emotes for the UI (screen positions). */
   emotes(max = 14) {
     const out = [];
+    this.fire?.markers(out);
     for (const rt of this.npcs.values()) {
       if (!rt.emote || !rt.visible) continue;
       const p = this.project(this._v.set(rt.pos.x, rt.pos.y + 0.78 * rt.scale, rt.pos.z));

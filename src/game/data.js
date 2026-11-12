@@ -269,6 +269,31 @@ export const BUILDINGS = {
     name: 'Water Tower', cat: 'service', size: 1, cost: { coins: 360, brick: 20, plank: 20 }, unlock: 11,
     desc: 'Fresh water for the whole town: farms and orchards in range grow 20% faster.', happy: { amount: 5, radius: 5 }, boost: { type: ['ladang', 'kebun'], radius: 5, amount: 0.2 },
   },
+  // ---- the Grand Update (v1.2): fire safety, trade, finance, culture, science
+  pemadam: {
+    name: 'Fire Station', cat: 'service', size: 1, cost: { coins: 280, brick: 20, plank: 10 }, unlock: 5,
+    desc: 'A brave crew puts out fires within 6 tiles by itself, and fires start far less often nearby.', jobs: 2, happy: { amount: 4, radius: 4 }, fireStation: true,
+  },
+  roti: {
+    name: 'Bakery', cat: 'prod', size: 1, cost: { coins: 200, brick: 10, plank: 10 }, unlock: 5,
+    desc: 'Bakes bread from food and sells it fresh. Turns food into coins and smells wonderful.', jobs: 2, consume: { food: 1.4 }, produce: { coins: 5 }, happy: { amount: 5, radius: 3 },
+  },
+  lab: {
+    name: 'Research Lab', cat: 'service', size: 1, cost: { coins: 450, glass: 10, brick: 15 }, unlock: 7,
+    desc: 'Scientists speed up research by 20% (up to 3 labs) and earn a little XP.', jobs: 2, produce: { xp: 1 },
+  },
+  pelabuhan: {
+    name: 'Harbor', cat: 'service', size: 2, cost: { coins: 600, plank: 40, brick: 20 }, unlock: 9, needWater: true, limit: 1,
+    desc: 'Merchant ships dock here: +1 trade order slot, orders pay 25% more, and the docks earn coins.', jobs: 2, produce: { coins: 3 },
+  },
+  bank: {
+    name: 'Bank', cat: 'service', size: 1, cost: { coins: 900, brick: 30, glass: 15, tool: 4 }, unlock: 12,
+    desc: 'Pays 1% interest on your coins every morning (up to 300 per level) and employs clerks.', jobs: 2, produce: { coins: 4 }, happy: { amount: 3, radius: 2 },
+  },
+  museum: {
+    name: 'Museum', cat: 'service', size: 2, cost: { coins: 1400, brick: 40, glass: 25, tool: 6 }, unlock: 14,
+    desc: 'Treasures from every island. Villagers visit in the evening; earns XP and coins.', jobs: 2, produce: { xp: 2, coins: 2 }, happy: { amount: 12, radius: 6 }, leisure: true,
+  },
   // ---- landmarks, one per island, only in their biome
   lumbung: {
     name: 'Grand Barn', cat: 'special', size: 2, cost: { coins: 400, plank: 30, brick: 15 }, unlock: 5, biomes: ['desa'], limit: 1,
@@ -455,6 +480,18 @@ export const QUESTS = [
   { id: 'q30', title: 'Music in the Air', desc: 'Build a Bandstand and reach 75% happiness.', goals: [{ type: 'build', id: 'panggung', n: 1 }, { type: 'happy', n: 75 }], reward: { coins: 700, xp: 360 }, after: 'q29' },
   { id: 'q31', title: 'Healthy Town', desc: 'Build a Clinic and a Water Tower.', goals: [{ type: 'build', id: 'klinik', n: 1 }, { type: 'build', id: 'menara_air', n: 1 }], reward: { coins: 900, xp: 420, glass: 15 }, after: 'q30' },
   { id: 'q32', title: 'Booming Industry', desc: 'Have 3 production-chain buildings (Sawmill, Kiln or Glassworks).', goals: [{ type: 'chain', n: 3 }], reward: { coins: 1200, xp: 520, tool: 5 }, after: 'q31' },
+  // ---- v1.2
+  { id: 'q34', title: 'Knowledge is Power', desc: 'Open the Town panel and finish 2 research projects.', goals: [{ type: 'research', n: 2 }], reward: { coins: 220, xp: 120, plank: 10 }, after: 'q6' },
+  { id: 'q35', title: 'Open for Business', desc: 'Deliver 3 trade orders from the Order Board.', goals: [{ type: 'orders', n: 3 }], reward: { coins: 300, xp: 150 }, after: 'q8' },
+  { id: 'q33', title: 'Safety First', desc: 'Build a Fire Station to protect the town.', goals: [{ type: 'build', id: 'pemadam', n: 1 }], reward: { coins: 260, xp: 140, brick: 10 }, after: 'q35' },
+  { id: 'q36', title: 'Fresh Bread', desc: 'Build a Bakery.', goals: [{ type: 'build', id: 'roti', n: 1 }], reward: { coins: 240, xp: 130, food: 30 }, after: 'q25' },
+  { id: 'q37', title: 'Rising Star', desc: 'Earn a 3-star rating on any island.', goals: [{ type: 'stars', n: 3 }], reward: { coins: 500, xp: 260, tool: 2 }, after: 'q10' },
+  { id: 'q39', title: 'Firefighter', desc: 'Put out 2 fires.', goals: [{ type: 'fires', n: 2 }], reward: { coins: 400, xp: 220 }, after: 'q33' },
+  { id: 'q40', title: 'Age of Science', desc: 'Build a Research Lab and finish 6 research projects.', goals: [{ type: 'build', id: 'lab', n: 1 }, { type: 'research', n: 6 }], reward: { coins: 900, xp: 450, glass: 15 }, after: 'q34' },
+  { id: 'q38', title: 'Set Sail', desc: 'Build a Harbor by the water.', goals: [{ type: 'build', id: 'pelabuhan', n: 1 }], reward: { coins: 800, xp: 380, plank: 30 }, after: 'q35' },
+  { id: 'q41', title: 'Gold Reserves', desc: 'Build a Bank.', goals: [{ type: 'build', id: 'bank', n: 1 }], reward: { coins: 1200, xp: 500 }, after: 'q32' },
+  { id: 'q42', title: 'House of Wonders', desc: 'Build a Museum.', goals: [{ type: 'build', id: 'museum', n: 1 }], reward: { coins: 1600, xp: 650, crystal: 4 }, after: 'q41' },
+  { id: 'q43', title: 'Five-Star Paradise', desc: 'Earn a 5-star rating on any island.', goals: [{ type: 'stars', n: 5 }], reward: { coins: 2500, xp: 1000, crystal: 8 }, after: 'q37' },
   { id: 'q23', title: 'Tree of Life', desc: 'Plant the Tree of Life on the Fantasy Isle.', goals: [{ type: 'build', id: 'pohonkehidupan', n: 1 }], reward: { coins: 6000, xp: 2500 }, after: 'q22' },
 ];
 
@@ -491,6 +528,17 @@ export const ACHIEVEMENTS = [
   { id: 'ach_chain', name: 'Industrialist', desc: 'Produce 100 goods in Sawmills, Kilns and Glassworks.', stat: 'chained', n: 100, reward: { coins: 1200 } },
   { id: 'ach_school', name: 'Scholar', desc: 'Earn 500 XP from Schools and Libraries.', stat: 'learned', n: 500, reward: { coins: 800 } },
   { id: 'ach_level20', name: 'Legend', desc: 'Reach level 20.', stat: 'level', n: 20, reward: { coins: 4000 } },
+  // ---- v1.2
+  { id: 'ach_research5', name: 'Inventor', desc: 'Finish 5 research projects.', stat: 'researched', n: 5, reward: { coins: 600 } },
+  { id: 'ach_research20', name: 'Enlightened', desc: 'Finish all 20 research projects.', stat: 'researched', n: 20, reward: { coins: 6000, crystal: 10 } },
+  { id: 'ach_orders25', name: 'Trader', desc: 'Deliver 25 trade orders.', stat: 'orders', n: 25, reward: { coins: 800 } },
+  { id: 'ach_orders100', name: 'Trade Baron', desc: 'Deliver 100 trade orders.', stat: 'orders', n: 100, reward: { coins: 3000, tool: 10 } },
+  { id: 'ach_fires', name: 'Hero of the Hour', desc: 'Put out 10 fires.', stat: 'fires', n: 10, reward: { coins: 900 } },
+  { id: 'ach_repair', name: 'Rebuilder', desc: 'Repair 3 burnt-down buildings.', stat: 'repairs', n: 3, reward: { coins: 500 } },
+  { id: 'ach_missions', name: 'Dutiful', desc: 'Complete 30 daily missions.', stat: 'missions', n: 30, reward: { coins: 1500 } },
+  { id: 'ach_star5', name: 'Five Stars', desc: 'Earn a 5-star rating on an island.', stat: 'maxstars', n: 5, reward: { coins: 2000 } },
+  { id: 'ach_stars20', name: 'Star Collector', desc: 'Collect 20 island stars.', stat: 'stars', n: 20, reward: { coins: 5000, essence: 2 } },
+  { id: 'ach_level30', name: 'Living Legend', desc: 'Reach the top level, 30.', stat: 'level', n: 30, reward: { coins: 10000, crystal: 20 } },
 ];
 
 // ---------------------------------------------------------------- random events
@@ -848,4 +896,10 @@ export const TIPS = [
   'Seasons change every 5 days. Stock up on food before winter!',
   'Water Towers make farms and orchards in range grow faster.',
   'Some events only happen in certain seasons.',
+  'Research in the Town panel gives permanent bonuses, and keeps going while the game is closed.',
+  'Trade orders pay well. A Harbor adds an extra slot and makes every order worth 25% more.',
+  'Fires spread if nobody puts them out. Tap a burning building, or build a Fire Station nearby.',
+  'Each island star adds 3% to production on that island. Variety, beauty and happy villagers earn stars.',
+  'Finish all three daily missions for a bonus chest.',
+  'Photo mode (camera button) hides the interface and lets you set the time of day and a filter.',
 ];

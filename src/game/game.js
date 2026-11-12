@@ -9,6 +9,7 @@ import { N, idx, inside, generateIsland, packIsland, unpackIsland, WALKABLE, ROA
 import { randomLook } from './people.js';
 import { rng } from '../engine/kit.js';
 import { FURNITURE, WALLPAPERS, FLOORS, homeStats, defaultFurniture, ENTERABLE } from './furniture.js';
+import { SystemsMixin } from './systems.js';
 
 export const SAVE_VERSION = 1;
 export const SECONDS_PER_GAME_HOUR = 30; // a full day takes 12 real minutes at 1x
@@ -83,6 +84,7 @@ export class Game {
     for (let k = 0; k < 2; k++) this.spawnNpc(I, true);
     this.refreshIsland();
     this.refreshQuests();
+    this.initSystems();
   }
 
   serialize() {
@@ -124,6 +126,7 @@ export class Game {
     for (const k of Object.keys(d.islands)) d.islands[k] = unpackIsland(d.islands[k]);
     if (!d.islands[d.current]) d.current = 'desa';
     this.s = d;
+    this.initSystems();
     this.refreshIsland();
     this.refreshQuests();
   }
@@ -154,7 +157,7 @@ export class Game {
     const H = new Float32Array(N * N);
     for (const b of I.buildings) {
       const def = BUILDINGS[b.type];
-      if (!def.happy || !b.built) continue;
+      if (!def.happy || !b.built || b.ruin) continue;
       const amt = def.happy.amount * (1 + 0.25 * ((b.level || 1) - 1));
       const r = def.happy.radius + (def.size - 1) * 0.5;
       const ci = b.i + (def.size - 1) / 2, cj = b.j + (def.size - 1) / 2;
@@ -181,12 +184,12 @@ export class Game {
 
   housingOf(b) {
     const def = BUILDINGS[b.type];
-    if (!def.housing || !b.built) return 0;
+    if (!def.housing || !b.built || b.ruin) return 0;
     return def.housing + (def.housingPerLevel || 0) * ((b.level || 1) - 1);
   }
   jobsOf(b) {
     const def = BUILDINGS[b.type];
-    if (!def.jobs || !b.built) return 0;
+    if (!def.jobs || !b.built || b.ruin) return 0;
     return def.jobs + ((b.level || 1) - 1);
   }
   housingCap(I = this.I) {
@@ -203,9 +206,9 @@ export class Game {
     for (const I of Object.values(this.s.islands))
       for (const b of I.buildings) {
         const def = BUILDINGS[b.type];
-        if (def.storage && b.built) cap += def.storage + (def.storagePerLevel || 0) * ((b.level || 1) - 1);
+        if (def.storage && b.built && !b.ruin) cap += def.storage + (def.storagePerLevel || 0) * ((b.level || 1) - 1);
       }
-    return cap;
+    return Math.round(cap * (1 + (this.techFx().storage || 0)));
   }
 
   assignHomes(I) {
@@ -391,13 +394,21 @@ export class Game {
   }
 
   /** Rotation that faces the nearest water (fishing docks) */
-  waterRot(i, j, I = this.I) {
-    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]]; // rot 0 faces +z, 1 faces +x (pier along local +z)
+  waterRot(i, j, I = this.I, s = 1) {
+    // rot 0 faces +z, 1 faces +x (pier along local +z); bigger docks face the side with the most water
+    let best = 0, bestN = 0;
     for (let r = 0; r < 4; r++) {
-      const [di, dj] = dirs[r];
-      if (inside(i + di, j + dj) && I.t[idx(i + di, j + dj)] === 'w') return r;
+      let n = 0;
+      for (let a = 0; a < s; a++) {
+        const [ii, jj] = [[i + a, j + s], [i + s, j + a], [i + a, j - 1], [i - 1, j + a]][r];
+        if (inside(ii, jj) && I.t[idx(ii, jj)] === 'w') n++;
+      }
+      if (n > bestN) {
+        best = r;
+        bestN = n;
+      }
     }
-    return 0;
+    return best;
   }
 
   place(type, i, j, rot = 0) {
@@ -422,7 +433,7 @@ export class Game {
         delete I.nodes[k];
         if (ROADS.has(I.t[k]) && this.biome !== 'kota') I.t[k] = this.defaultGround();
       }
-    const rec = { id: I.nextId++, type, i, j, rot: def.needWater ? this.waterRot(i, j) : rot, level: 1, paint: 0, built: 0, progress: 0 };
+    const rec = { id: I.nextId++, type, i, j, rot: def.needWater ? this.waterRot(i, j, I, def.size) : rot, level: 1, paint: 0, built: 0, progress: 0 };
     I.buildings.push(rec);
     for (const [ii, jj] of footprint(rec)) this.occ[idx(ii, jj)] = rec.id;
     this.give(gained, { silent: true });
@@ -487,6 +498,7 @@ export class Game {
     const def = BUILDINGS[rec.type];
     if (def.fixed) return { ok: false, reason: "Can't be demolished" };
     const I = this.I;
+    if (I.fires?.length) I.fires = I.fires.filter((f) => f.bid !== rec.id);
     I.buildings = I.buildings.filter((b) => b !== rec);
     for (const [i, j] of footprint(rec)) this.occ[idx(i, j)] = 0;
     const refund = {};
@@ -544,7 +556,7 @@ export class Game {
     if (n.hp < 0) n.hp = def.hp;
     let y = TOOL_TIERS[this.s.player.tool].yield;
     if (this.isRested()) y += 1;
-    y += this.evFx().gatherBonus || 0;
+    y += (this.evFx().gatherBonus || 0) + (this.techFx().gather || 0);
     const items = { [def.res]: y };
     if (def.bonus && this.rand() < 0.35) Object.assign(items, def.bonus);
     if (this.rand() < 0.04) items.coins = 5 + Math.floor(this.rand() * 15);
@@ -555,7 +567,7 @@ export class Game {
     let depleted = false;
     if (n.hp <= 0) {
       n.hp = 0;
-      n.re = this.absHour() + def.regrow;
+      n.re = this.absHour() + def.regrow * (1 - (this.techFx().regrow || 0));
       depleted = true;
       this.computeHappyMap();
     }
@@ -632,7 +644,8 @@ export class Game {
       if (hs.sleeps < this.residentsOf(home)) env -= 8;
     }
     const job = p.job ? 8 : this.I.npcs.length < 3 ? 4 : -6;
-    let ev = (fx.mood || 0) + (this.seasonDef().mood || 0);
+    let ev = (fx.mood || 0) + (this.seasonDef().mood || 0) + (this.techFx().mood || 0);
+    if (home?.fire) ev -= 14;
     if (evNow) {
       if (sick) ev -= 8;
       if (fx.burnWood && evNow.warm !== undefined) ev += evNow.warm ? 5 : -8;
@@ -841,10 +854,12 @@ export class Game {
       }
       // a quiet daily bonus: XP for every resident
       this.addXp(Math.max(5, this.population()));
+      this.bankInterest();
       this.emit('newday', T.day);
     }
     this.I.lastAbs = this.absHour();
     this.produce(dtH, presence);
+    this.fireTick(dtH);
     if (Math.floor(T.hour) !== prevHour) this.hourly();
   }
 
@@ -853,7 +868,7 @@ export class Game {
   }
   baseMult(res, biome = this.biome) {
     const bonus = BIOMES[biome].bonus || {};
-    return (bonus[res] || 1) * (this.seasonDef().prod[res] || 1);
+    return (bonus[res] || 1) * (this.seasonDef().prod[res] || 1) * this.techMult(res) * (biome === this.biome ? this.starMult() : 1);
   }
   /** Production multiplier from the running event on this island (res: resource key or 'coin'). */
   eventMult(res) {
@@ -909,8 +924,8 @@ export class Game {
     const fx = ev ? EVENT_BY_ID[ev.id]?.fx || NO_FX : NO_FX;
     for (const b of I.buildings) {
       const def = BUILDINGS[b.type];
-      if (!b.built) continue;
-      if (def.produce) {
+      if (!b.built || b.ruin) continue;
+      if (def.produce && !b.fire) {
         const workers = presence.get(b.id) || 0;
         if (!workers) continue;
         b.acc ||= {};
@@ -920,15 +935,16 @@ export class Game {
         k *= this.boostOf(b);
         // processing buildings use up their inputs from storage; without them they stall
         if (def.consume) {
+          const save = 1 - (this.techFx().consume || 0);
           let f = 1;
-          for (const [r, rate] of Object.entries(def.consume)) f = Math.min(f, (this.s.res[r] || 0) / Math.max(1e-6, rate * k));
+          for (const [r, rate] of Object.entries(def.consume)) f = Math.min(f, (this.s.res[r] || 0) / Math.max(1e-6, rate * save * k));
           f = Math.max(0, Math.min(1, f));
           b.stalled = f < 0.05;
           if (f <= 0) continue;
           k *= f;
           b.used ||= {};
           for (const [r, rate] of Object.entries(def.consume)) {
-            b.used[r] = (b.used[r] || 0) + rate * k;
+            b.used[r] = (b.used[r] || 0) + rate * save * k;
             if (b.used[r] >= 1) {
               const n = Math.min(Math.floor(b.used[r]), this.s.res[r] || 0);
               b.used[r] -= n;
@@ -967,7 +983,7 @@ export class Game {
         const residents = I.npcs.filter((p) => p.home === b.id).length;
         if (residents) {
           const em = this.eventMult('coin') * (fx.tax ?? 1);
-          const base = residents * def.tax * 0.3 * moodK * dtH * this.baseMult('coin');
+          const base = residents * def.tax * 0.3 * moodK * dtH * this.baseMult('coin') * (1 + (this.techFx().tax || 0));
           b.tax = (b.tax || 0) + base * em;
           if (em > 1) ev.gain.coins = (ev.gain.coins || 0) + base * (em - 1);
           if (b.tax >= 6) {
@@ -993,7 +1009,7 @@ export class Game {
     const happy = this.islandHappiness();
     const free = this.housingCap() - I.npcs.length;
     if (free > 0 && h >= 7 && h <= 19 && happy >= 35 && this.s.res.food > 0) {
-      const chance = (0.3 + happy / 220) * (this.evFx().arrivals || 1);
+      const chance = (0.3 + happy / 220) * (this.evFx().arrivals || 1) * (1 + (this.techFx().arrivals || 0));
       if (Math.random() < chance) {
         const p = this.spawnNpc(I);
         p.arriving = 1;
@@ -1027,6 +1043,8 @@ export class Game {
     for (const p of I.npcs) if (p.req && now > p.req.until) p.req = null;
     // market prices drift back
     for (const k of RES_KEYS) this.s.market[k] += (1 - this.s.market[k]) * 0.05;
+    this.fireHourly();
+    this.checkRatings();
     // events
     this.eventHourly();
     this.updateEvent();
@@ -1081,7 +1099,7 @@ export class Game {
     return (ev && EVENT_BY_ID[ev.id]?.fx) || NO_FX;
   }
   buildSpeed() {
-    return this.evFx().build || 1;
+    return (this.evFx().build || 1) * (1 + (this.techFx().build || 0));
   }
   /** Pose ('dance' | 'wave') when villagers should gather at the plaza at hour h, else null. */
   eventGather(h) {
@@ -1491,7 +1509,7 @@ export class Game {
     return Object.values(this.s.islands).some((I) => I.buildings.some((b) => b.type === 'pasar' && b.built));
   }
   sellPrice(r) {
-    return Math.max(1, Math.round(RES[r].price * this.s.market[r] * this.sellMultiplier()));
+    return Math.max(1, Math.round(RES[r].price * this.s.market[r] * this.sellMultiplier() * (1 + (this.techFx().sell || 0))));
   }
   buyPrice(r) {
     return Math.max(2, Math.round(RES[r].price * 1.7 * (2 - this.s.market[r])));
@@ -1544,7 +1562,7 @@ export class Game {
     // jobs run in parallel up to the slot count; extra jobs wait in line
     const running = this.s.craft.queue.slice(0, slots);
     const start = running.length < slots ? now : Math.min(...running.map((q) => q.end));
-    this.s.craft.queue.push({ id, start, end: start + R.time * 1000 });
+    this.s.craft.queue.push({ id, start, end: start + this.craftTime(R) * 1000 });
     this.emit('craft');
     return { ok: true };
   }
@@ -1572,11 +1590,15 @@ export class Game {
         if (i < slots && Q[i].start > now) {
           const R = RECIPES.find((r) => r.id === Q[i].id);
           Q[i].start = now;
-          Q[i].end = now + R.time * 1000;
+          Q[i].end = now + this.craftTime(R) * 1000;
         }
       }
       this.emit('craft');
     }
+  }
+
+  craftTime(R) {
+    return R.time * (1 - (this.techFx().craft || 0));
   }
 
   upgradeTool() {
@@ -1603,6 +1625,8 @@ export class Game {
     this.s.player.coins -= BIOMES[id].cost;
     const I = generateIsland(id, this.s.seed + BIOME_KEYS.indexOf(id) * 17);
     I.lastAbs = this.absHour();
+    I.fires = [];
+    I.starBest = 0;
     this.s.islands[id] = I;
     for (let k = 0; k < 2; k++) this.spawnNpc(I, true);
     this.addXp(100);
@@ -1636,7 +1660,7 @@ export class Game {
     for (const p of I.npcs) if (p.job) workers.set(p.job, (workers.get(p.job) || 0) + 1);
     for (const b of I.buildings) {
       const def = BUILDINGS[b.type];
-      if (!b.built) continue;
+      if (!b.built || b.ruin) continue;
       const w = workers.get(b.id) || 0;
       if (def.produce && w) {
         const lvl = 1 + 0.5 * ((b.level || 1) - 1);
@@ -1653,12 +1677,12 @@ export class Game {
         for (const [r, rate] of Object.entries(def.produce)) {
           const rk = r === 'coins' ? 'coin' : r;
           if (r === 'xp') add('xp', rate * k);
-          else add(r, rate * k * (bonus[rk] || 1) * (sp[rk] || 1));
+          else add(r, rate * k * (bonus[rk] || 1) * (sp[rk] || 1) * this.techMult(rk));
         }
       }
       if (def.housing) {
         const residents = I.npcs.filter((p) => p.home === b.id).length;
-        add('coins', residents * def.tax * 0.3 * moodK * hours * eff * (bonus.coin || 1));
+        add('coins', residents * def.tax * 0.3 * moodK * hours * eff * (bonus.coin || 1) * (1 + (this.techFx().tax || 0)));
       }
     }
     // people eat three meals a day
@@ -1679,7 +1703,7 @@ export class Game {
 
   /** Called when the app comes back after being closed or in the background. */
   applyOffline(seconds) {
-    const s = clamp(seconds, 0, OFFLINE_CAP_S);
+    const s = clamp(seconds, 0, OFFLINE_CAP_S + (this.techFx().offline || 0) * 3600);
     if (s < 120) return null;
     const hours = s / SECONDS_PER_GAME_HOUR;
     const total = {};
@@ -1688,6 +1712,7 @@ export class Game {
       for (const [r, v] of Object.entries(got)) total[r] = (total[r] || 0) + v;
     }
     this.updateCrafting(Date.now());
+    this.updateResearch(Date.now());
     return { seconds: s, got: total };
   }
 
@@ -1720,6 +1745,10 @@ export class Game {
       case 'seasons': return [(S.seasons || 0) - (base.seasons || 0), g.n];
       case 'chain': return [Object.values(this.s.islands).reduce((a, I) => a + I.buildings.filter((b) => CHAIN_TYPES.has(b.type) && b.built).length, 0), g.n];
       case 'happy': return [Math.round(Math.max(...Object.values(this.s.islands).map((I) => this.islandHappiness(I)))), g.n];
+      case 'research': return [this.s.research.done.length, g.n];
+      case 'orders': return [(S.orders || 0) - (base.orders || 0), g.n];
+      case 'fires': return [(S.fires || 0) - (base.fires || 0), g.n];
+      case 'stars': return [Math.max(0, ...Object.values(this.s.islands).map((I) => I.starBest || 0)), g.n];
       default: return [0, 1];
     }
   }
@@ -1755,6 +1784,7 @@ export class Game {
       case 'kota': return this.s.islands.kota ? 1 : 0;
       case 'level': return this.s.player.level;
       case 'streak': return this.s.daily.streak;
+      case 'maxstars': return Math.max(0, ...Object.values(this.s.islands).map((I) => I.starBest || 0));
       default: return this.s.stats[stat] || 0;
     }
   }
@@ -1797,8 +1827,11 @@ export class Game {
       this._achTimer = 0;
       this.checkAchievements();
       this.updateCrafting();
+      this.updateSystems();
     }
   }
 }
+
+Object.assign(Game.prototype, SystemsMixin);
 
 export { WALKABLE_BUILDINGS, STEP };

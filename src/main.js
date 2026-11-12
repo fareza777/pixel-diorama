@@ -21,7 +21,7 @@ const escH = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', 
 // big icon on top of an announcement (sits above the spinning .burst background)
 const evIcon = (name) => `<div style="position:relative;margin:0 auto 0.2em">${icon(name || 'event', 'xl')}</div>`;
 
-const VERSION = '1.0.0';
+const VERSION = '1.2.0';
 const TITLE_HOUR = 10.5;
 
 class App {
@@ -239,8 +239,60 @@ class App {
       ui.toast(`${recipe.name} is ready`, { icon: RES[Object.keys(recipe.out)[0]].icon, ms: 1600 });
     });
     g.on('newday', (d) => {
-      ui.toast(`Day ${d} begins`, { icon: 'sun' });
+      ui.titleCard(`Day ${d}`, `${g.seasonDef().name} · day ${g.seasonDay()} of the season`, 'sunrise');
+      this.audio.play('chord', { notes: [62, 66, 69, 74], dur: 2.4, gain: 0.035 });
       this.save();
+    });
+    // ---- v1.2 systems
+    g.on('fire:start', ({ rec }) => {
+      this.audio.play('bell', { pitch: 1.4 });
+      this.audio.play('bell', { pitch: 1.4, delay: 0.35 });
+      this.audio.play('horn', { pitch: 0.9, dur: 1.2, delay: 0.2 });
+      platform.buzz('heavy');
+      this.engine.shake(0.03);
+      ui.toast(`Fire at the ${BUILDINGS[rec.type].name}! Tap it to put it out.`, { kind: 'warn', icon: 'fire', ms: 4500 });
+      this.saveSoon();
+    });
+    g.on('fire:out', ({ rec, by, got }) => {
+      if (!rec) return;
+      const c = w.buildingCenter(rec);
+      if (by === 'mayor') {
+        this.audio.play('sparkle');
+        this.audio.play('quest');
+        platform.buzz('medium');
+        if (c && got) ui.popup(c.clone().add(new THREE.Vector3(0, 1.2, 0)), got);
+        ui.toast(`You saved the ${BUILDINGS[rec.type].name}! The villagers cheer.`, { icon: 'heart', ms: 3200 });
+        for (const rt of w.npcs.values()) if (rt.visible && c && rt.pos.distanceTo(c) < 4) w.emote(rt, 'heart', 2.5);
+      } else ui.toast(`The fire crew saved the ${BUILDINGS[rec.type].name}.`, { icon: 'fire', ms: 3000 });
+      this.saveSoon();
+    });
+    g.on('fire:ruin', ({ rec }) => {
+      this.audio.play('crumble');
+      this.audio.play('boom', { gain: 0.5 });
+      this.engine.shake(0.07);
+      platform.buzz('heavy');
+      const c = w.buildingCenter(rec);
+      if (c) w.bursts.emit(c.clone().add(new THREE.Vector3(0, 0.4, 0)), { n: 40, color: '#4a4550', speed: 1.4, up: 1.6, life: 1.4, gravity: -0.2 });
+      ui.toast(`The ${BUILDINGS[rec.type].name} burned down. Tap it to rebuild it.`, { kind: 'warn', icon: 'fire', ms: 5000 });
+      this.saveSoon();
+    });
+    g.on('research:done', (t) => {
+      this.audio.play('levelup');
+      this.audio.play('chord', { notes: [60, 64, 67, 72, 76], dur: 3, gain: 0.05 });
+      platform.buzz('medium');
+      ui.queueModal(() => ui.modal(`<div class="burst"></div>${ui.iconHTML('research', 'xl')}<h2>Research Complete!</h2><p><b>${escH(t.name)}</b></p><p class="muted">${escH(t.desc)}</p><button class="btn primary big" data-act="modal-ok">Excellent</button>`, { cls: 'celebrate' }));
+      this.save();
+    });
+    g.on('order:done', () => {
+      w.sailShips();
+      this.saveSoon();
+    });
+    g.on('stars', ({ id, stars, got }) => {
+      this.audio.play('levelup');
+      this.audio.play('sparkle');
+      platform.buzz('heavy');
+      ui.queueModal(() => ui.modal(`<div class="burst"></div><div class="bigstars">${[1, 2, 3, 4, 5].map((n) => `<i class="${n <= stars ? 'on' : ''}" style="--d:${n * 0.12}s"></i>`).join('')}</div><h2>${stars}-Star Island!</h2><p>${escH(BIOMES[id].name)} earned a new rating. Every star adds 3% to production here.</p>${ui.rewardHTML(got)}<button class="btn primary big" data-act="modal-ok">Wonderful</button>`, { cls: 'celebrate' }));
+      this.saveSoon();
     });
     g.on('season', (S) => {
       this.audio.play('chord', { notes: [60, 64, 67, 71, 74], dur: 3, gain: 0.05 });
@@ -254,7 +306,7 @@ class App {
       this.resetCamera();
       this.env.setWeather(g.weatherName(), true);
       ui.refreshHUD(true);
-      ui.toast(`Welcome to ${BIOMES[id].name}`, { icon: 'map', ms: 3000 });
+      ui.titleCard(BIOMES[id].name, BIOMES[id].desc, 'map');
       if (summary && Object.keys(summary).length) ui.queueModal(() => ui.modal(`<h2>While you were away...</h2><p>The villagers of ${BIOMES[id].short} kept working.</p>${ui.rewardHTML(summary)}<button class="btn primary big" data-act="modal-ok">Nice!</button>`));
       this.save();
     });
@@ -368,7 +420,7 @@ class App {
     const off = this.offline;
     if (off && Object.keys(off.got).length) {
       const h = Math.floor(off.seconds / 3600), m = Math.floor((off.seconds % 3600) / 60);
-      this.ui.queueModal(() => this.ui.modal(`<h2>Welcome back!</h2><p>You were away for ${h ? h + ' h ' : ''}${m} min. Your villagers kept working:</p>${this.ui.rewardHTML(off.got)}<button class="btn primary big" data-act="modal-ok">Kumpulkan</button>`));
+      this.ui.queueModal(() => this.ui.modal(`<h2>Welcome back!</h2><p>You were away for ${h ? h + ' h ' : ''}${m} min. Your villagers kept working:</p>${this.ui.rewardHTML(off.got)}<button class="btn primary big" data-act="modal-ok">Collect</button>`));
     }
     if (this.game.dailyStatus().available) this.ui.queueModal(() => this.ui.openDaily());
     this.ui._nextModal();
@@ -464,7 +516,7 @@ class App {
     const off = this.game.applyOffline(away);
     if (off && Object.keys(off.got).length && this.started) {
       const m = Math.round(off.seconds / 60);
-      this.ui.queueModal(() => this.ui.modal(`<h2>Welcome back!</h2><p>In ${m} min, your villagers produced:</p>${this.ui.rewardHTML(off.got)}<button class="btn primary big" data-act="modal-ok">Kumpulkan</button>`));
+      this.ui.queueModal(() => this.ui.modal(`<h2>Welcome back!</h2><p>In ${m} min, your villagers produced:</p>${this.ui.rewardHTML(off.got)}<button class="btn primary big" data-act="modal-ok">Collect</button>`));
     }
   }
 
@@ -565,7 +617,7 @@ class App {
     this.env.tween = null;
     // the title screen always shows the island on a clear morning; the real clock and weather
     // take over once play starts (weather blends in, the hour cuts under the title fade)
-    this.env.hour = this.started ? g.s.time.hour : TITLE_HOUR;
+    this.env.hour = this.photo?.hour ?? (this.started ? g.s.time.hour : TITLE_HOUR);
     const wn = this.started ? g.weatherName() : 'clear';
     if (this.env.weather !== wn) this.env.setWeather(wn);
     if (this.world.scene) this.env.center.set(0, 0, 0);
@@ -580,6 +632,7 @@ class App {
     this.interior.update(dt);
     g.update(dt);
     if (!this.started) this.cam.goal.az += dt * 4;
+    if (this.photo?.orbit) this.cam.goal.az += dt * 7;
     this.cam.update(dt);
     this.audio.update(dt, this.env);
     this.ui.update(dt);

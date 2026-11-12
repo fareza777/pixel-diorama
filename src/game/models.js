@@ -1083,11 +1083,223 @@ function menaraAir(b, c, level) {
   b.glowBox(0.04, 0.04, 0.04, '#ff4a4a', 7, 0, H + 0.6, 0, {}, '#a83a3a');
 }
 
+// ---------------------------------------------------------------- v1.2 buildings
+
+function flagPart(color, x, y, z, w = 0.2, h = 0.11) {
+  const flag = new THREE.Group();
+  flag.add(partMesh(new THREE.BoxGeometry(w, h, 0.01).translate(w / 2, h / 2, 0), color, mats.smooth()));
+  flag.position.set(x, y, z);
+  flag.userData.flag = 1;
+  return flag;
+}
+
+function pemadam(b, c, level) {
+  const red = '#d8323a', redD = '#a82630';
+  b.box(0.92, 0.04, 0.92, '#8d909b', 0, 0, 0, {}, 'rough');
+  // the station: brick red with a wide garage door and a hose tower
+  b.box(0.62, 0.44, 0.5, red, -0.06, 0.04, -0.14, {}, 'rough');
+  b.box(0.66, 0.05, 0.54, '#efe6d6', -0.06, 0.48, -0.14);
+  b.box(0.3, 0.3, 0.02, '#e8e4dc', -0.14, 0.04, 0.12);
+  for (let k = 0; k < 4; k++) b.box(0.3, 0.012, 0.025, '#b8b2a6', -0.14, 0.08 + k * 0.07, 0.13);
+  windowPane(b, 0.14, 0.26, 0.12, 0, '#efe6d6', 0.1);
+  const H = 0.95 + (level - 1) * 0.12;
+  b.box(0.2, H, 0.2, redD, 0.3, 0.04, -0.28, {}, 'rough');
+  b.box(0.24, 0.04, 0.24, '#efe6d6', 0.3, 0.04 + H, -0.28);
+  b.hip(0.24, 0.16, '#3a3e4a', 0.3, 0.08 + H, -0.28);
+  // the alarm bell and a spinning beacon on the tower
+  b.ball(0.045, '#ffd23d', 0.3, H - 0.12, -0.17, {}, 'smooth', 0);
+  const beacon = new THREE.Group();
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.035, 0.035), mats.glow('#ff3a3a', 7, '#a83a3a', true));
+  beacon.add(lamp);
+  beacon.position.set(0.3, 0.3 + H, -0.28);
+  beacon.userData.spin = 'y';
+  b.part(beacon);
+  // the little fire truck parked in front
+  b.box(0.34, 0.1, 0.16, red, -0.14, 0.06, 0.3, {}, 'smooth');
+  b.box(0.12, 0.08, 0.15, red, 0.02, 0.16, 0.3, {}, 'smooth');
+  b.box(0.1, 0.05, 0.155, '#bfe9ff', 0.03, 0.18, 0.3, {}, 'smooth');
+  b.box(0.22, 0.02, 0.04, '#c8cdd6', -0.18, 0.17, 0.3);
+  for (const [x, z] of [[-0.24, 0.22], [-0.24, 0.38], [0.0, 0.22], [0.0, 0.38]]) b.cyl(0.035, 0.035, 0.03, '#1f2230', x, 0.04, z, { rx: Math.PI / 2 });
+  b.glowBox(0.03, 0.03, 0.03, '#ff3a3a', 6, 0.05, 0.24, 0.3, {}, '#a83a3a');
+  // hose reel and hydrant
+  b.cyl(0.07, 0.07, 0.05, '#e8c860', 0.3, 0.1, 0.12, { rx: Math.PI / 2 });
+  b.cyl(0.035, 0.04, 0.14, red, 0.38, 0.04, 0.36);
+  b.ball(0.035, red, 0.38, 0.18, 0.36, {}, 'smooth', 0);
+  b.light(-0.1, 0.38, 0.35, '#ffd8b0', 1.8);
+}
+
+function roti(b, c, level) {
+  b.box(0.9, 0.04, 0.9, c.stone, 0, 0, 0, {}, 'rough');
+  const wallH = 0.4 + (level - 1) * 0.12;
+  b.box(0.66, wallH, 0.52, c.wall, 0, 0.04, -0.1);
+  const top = b.gable(0.66, 0.52, 0.04 + wallH, c.wall, c.roof, { pitch: 0.55, z: -0.1 });
+  // a striped awning over the shop window
+  for (let k = 0; k < 6; k++) b.box(0.11, 0.015, 0.2, k % 2 ? '#fff6e8' : '#e8913a', -0.275 + k * 0.11, 0.33, 0.24, { rx: 0.35 });
+  b.box(0.3, 0.16, 0.03, '#2a2230', -0.12, 0.13, 0.17);
+  b.glowBox(0.28, 0.14, 0.02, '#ffc36b', 3.5, -0.12, 0.14, 0.18);
+  for (let k = 0; k < 3; k++) b.ball(0.035, '#d8954a', -0.21 + k * 0.09, 0.18, 0.2, { sx: 1.6, sy: 0.8 }, 'smooth', 0);
+  door(b, 0.2, 0.17, 0, c.trim, 0.28, 0.14);
+  // brick oven chimney and a big bread sign
+  b.box(0.14, 0.42, 0.14, '#b8603f', -0.2, top - 0.25, -0.2, {}, 'rough');
+  b.smoke.push(new THREE.Vector3(-0.2, top + 0.25, -0.2));
+  b.box(0.02, 0.18, 0.02, WOOD_D, 0.34, 0.3, 0.19);
+  const sign = new THREE.Group();
+  sign.add(partMesh(new THREE.BoxGeometry(0.2, 0.1, 0.02).translate(0, -0.05, 0), '#efe6d6', mats.smooth()));
+  sign.add(partMesh(new THREE.SphereGeometry(0.035, 6, 4).scale(1.8, 0.8, 0.6).translate(0, -0.05, 0.02), '#d8954a', mats.smooth()));
+  sign.position.set(0.34, 0.46, 0.27);
+  sign.userData.swing = 1;
+  b.part(sign);
+  // flour sacks and a bread cart
+  for (let k = 0; k < 2 + (level - 1); k++) b.cyl(0.06, 0.07, 0.14, '#efe6d6', 0.32 - k * 0.12, 0.04, -0.34, {}, 'rough', 6);
+  b.box(0.18, 0.08, 0.12, WOOD, -0.3, 0.07, 0.34);
+  for (let k = 0; k < 3; k++) b.ball(0.03, '#e8a858', -0.36 + k * 0.06, 0.16, 0.34, { sx: 1.5 }, 'smooth', 0);
+  b.cyl(0.04, 0.04, 0.02, '#3a3e4a', -0.3, 0.04, 0.27, { rx: Math.PI / 2 });
+  b.light(0, 0.3, 0.4, '#ffcf8a', 2);
+}
+
+function lab(b, c, level) {
+  b.box(0.92, 0.04, 0.92, '#c9ccd4', 0, 0, 0, {}, 'rough');
+  const h = 0.48 + (level - 1) * 0.12;
+  b.box(0.64, h, 0.5, '#e8ecf4', -0.04, 0.04, -0.1);
+  b.box(0.68, 0.05, 0.54, '#7a8496', -0.04, 0.04 + h, -0.1);
+  // long lab windows that glow cyan at night
+  for (const x of [-0.24, 0.06]) {
+    b.box(0.2, 0.14, 0.03, '#7a8496', x, 0.2, 0.15);
+    b.glowBox(0.17, 0.11, 0.03, '#8af4ff', 4.5, x, 0.215, 0.16);
+  }
+  door(b, 0.21, 0.16, 0, '#5a6a8a', 0.28, 0.13);
+  // observatory dome with a rotating satellite dish
+  b.dome(0.2, '#c8cdd6', -0.18, 0.09 + h, -0.18, {}, 'smooth', 12);
+  b.box(0.04, 0.18, 0.08, '#2a3247', -0.18, 0.12 + h, -0.01, { rx: -0.5 });
+  const dish = new THREE.Group();
+  dish.add(partMesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 6).translate(0, 0.08, 0), '#7a8496', mats.smooth()));
+  const bowl = partMesh(new THREE.SphereGeometry(0.12, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2.6).scale(1, 0.45, 1), '#f4f6fb', mats.smooth());
+  bowl.rotation.x = -1.0;
+  bowl.position.set(0, 0.18, 0.02);
+  dish.add(bowl);
+  dish.position.set(0.18, 0.09 + h, -0.2);
+  dish.userData.spin = 'y';
+  b.part(dish);
+  // bubbling flasks on the bench outside
+  b.box(0.3, 0.12, 0.12, '#7a8496', 0.22, 0.04, 0.32);
+  const cols = ['#7fe08a', '#ff8ad8', '#8af4ff'];
+  for (let k = 0; k < 3; k++) {
+    b.cyl(0.012, 0.03, 0.05, '#dff4ff', 0.12 + k * 0.1, 0.16, 0.32, {}, 'smooth', 6);
+    b.glowBall(0.026, cols[k], 4, 0.12 + k * 0.1, 0.18, 0.32, '#5a6a8a', true);
+  }
+  const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.05, 1), mats.glow('#8af4ff', 6, '#4a9ad0', true));
+  orb.position.set(0.22, 0.33, 0.32);
+  orb.userData.float = 1;
+  b.part(orb);
+  b.light(0.1, 0.3, 0.4, '#8af4ff', 2.2);
+}
+
+function pelabuhan(b, c, level) {
+  // land side (-z): a warehouse and crates; the long pier runs out over the water (+z)
+  b.box(1.9, 0.04, 0.9, c.stone, 0, 0, -0.5, {}, 'rough');
+  b.box(0.9, 0.46, 0.56, c.wall === STYLE.desa.wall ? WOOD : c.wall, -0.42, 0.04, -0.58, {}, 'rough');
+  b.gable(0.9, 0.56, 0.5, c.wall === STYLE.desa.wall ? WOOD : c.wall, c.roof, { pitch: 0.5, x: -0.42, z: -0.58 });
+  b.box(0.3, 0.3, 0.02, '#2a2230', -0.42, 0.04, -0.29);
+  windowPane(b, -0.72, 0.3, -0.29, 0, c.trim, 0.1);
+  for (let k = 0; k < 3 + level; k++) b.box(0.16, 0.14, 0.16, k % 2 ? '#a8794c' : '#c9a070', 0.3 + (k % 3) * 0.18, 0.04 + Math.floor(k / 3) * 0.14, -0.62, { ry: (k % 2) * 0.3 }, 'rough');
+  for (let k = 0; k < 2; k++) b.cyl(0.07, 0.07, 0.16, '#8a5a38', 0.82, 0.04, -0.3 - k * 0.16, {}, 'rough', 8);
+  // the pier
+  b.box(1.6, 0.05, 0.9, WOOD, 0, 0.02, 0.45);
+  for (let k = 0; k < 8; k++) b.box(1.6, 0.006, 0.01, WOOD_D, 0, 0.072, 0.06 + k * 0.11);
+  for (const x of [-0.75, -0.25, 0.25, 0.75]) for (const z of [0.15, 0.85]) b.cyl(0.035, 0.035, 0.7, WOOD_D, x, -0.6, z);
+  for (const x of [-0.7, 0.7]) b.cyl(0.03, 0.04, 0.12, '#3a3e4a', x, 0.07, 0.86);
+  // a little loading crane
+  b.box(0.06, 0.7, 0.06, '#3a3e4a', 0.68, 0.07, 0.15);
+  b.box(0.06, 0.04, 0.5, '#3a3e4a', 0.68, 0.74, 0.35);
+  b.box(0.01, 0.3, 0.01, '#c8cdd6', 0.68, 0.45, 0.56);
+  b.box(0.12, 0.08, 0.12, '#c9a070', 0.68, 0.38, 0.56, {}, 'rough');
+  // the merchant ship moored alongside (animated: bobs, and sails off with every delivered order)
+  const sb = new Builder();
+  sb.box(1.0, 0.12, 0.3, '#7a4a2a', 0, 0, 0, {}, 'rough');
+  sb.box(0.86, 0.06, 0.26, '#a8794c', 0, 0.12, 0);
+  sb.box(0.22, 0.08, 0.28, '#a8794c', -0.38, 0.12, 0);
+  sb.box(0.1, 0.06, 0.3, '#5a3a22', 0.52, 0.02, 0, {}, 'rough');
+  sb.cyl(0.02, 0.02, 0.85, WOOD_D, 0.05, 0.12, 0);
+  sb.box(0.02, 0.4, 0.34, '#f4efe2', 0.07, 0.36, 0, {}, 'smooth');
+  sb.box(0.02, 0.22, 0.22, '#f4efe2', 0.07, 0.8, 0, {}, 'smooth');
+  sb.box(0.14, 0.06, 0.01, '#e94f4f', 0.12, 0.92, 0, {}, 'smooth');
+  for (let k = 0; k < 2; k++) sb.box(0.12, 0.1, 0.12, '#c9a070', -0.15 - k * 0.15, 0.18, 0, {}, 'rough');
+  sb.glowBox(0.04, 0.05, 0.04, '#ffc36b', 5, -0.46, 0.22, 0);
+  const ship = sb.build();
+  ship.position.set(-0.1, -0.06, 1.12);
+  ship.userData.ship = 1;
+  b.part(ship);
+  b.glowBox(0.06, 0.08, 0.06, '#ffc36b', 5, -0.7, 0.24, 0.86);
+  b.light(-0.4, 0.4, 0.2, '#ffcf8a', 2.2);
+  b.light(0.6, 0.3, 0.8, '#ffcf8a', 1.6);
+}
+
+function bank(b, c, level) {
+  const marble = '#e8e4dc', marbleD = '#c8c2b6';
+  b.box(0.92, 0.04, 0.92, marbleD, 0, 0, 0, {}, 'rough');
+  // steps, columns, a pediment and a golden dome
+  for (let k = 0; k < 3; k++) b.box(0.8 - k * 0.06, 0.035, 0.24 - k * 0.04, marble, 0, 0.04 + k * 0.035, 0.28 - k * 0.02);
+  const h = 0.5 + (level - 1) * 0.1;
+  b.box(0.7, h, 0.44, '#f0ece4', 0, 0.04, -0.12);
+  for (let k = 0; k < 4; k++) b.cyl(0.035, 0.04, h - 0.04, marble, -0.27 + k * 0.18, 0.145, 0.15, {}, 'smooth', 8);
+  b.box(0.76, 0.05, 0.12, marble, 0, 0.04 + h, 0.14);
+  b.prism(0.78, 0.18, 0.12, marble, 0, 0.09 + h, 0.14);
+  b.box(0.74, 0.06, 0.5, marbleD, 0, 0.04 + h, -0.12);
+  b.dome(0.17, '#ffd23d', 0, 0.1 + h, -0.14, {}, 'smooth', 12);
+  b.cyl(0.012, 0.012, 0.12, '#ffd23d', 0, 0.27 + h, -0.14);
+  b.box(0.18, 0.28, 0.02, '#3a2a1a', 0, 0.145, -0.02 + 0.13 - 0.12);
+  b.glowBox(0.1, 0.05, 0.02, '#ffd23d', 3, 0, 0.18 + h * 0.7, 0.21, {}, '#e2b33c', true);
+  b.part(flagPart('#2f7a4c', 0.012, 0.36 + h, -0.14, 0.16, 0.09));
+  // gold bars by the vault door and a lamp each side
+  for (let k = 0; k < 2 + level; k++) b.box(0.08, 0.035, 0.04, '#ffd23d', 0.32, 0.04 + (k % 2) * 0.035, 0.36 - Math.floor(k / 2) * 0.05, {}, 'smooth');
+  for (const x of [-0.38, 0.38]) {
+    b.cyl(0.012, 0.012, 0.3, DARK, x, 0.04, 0.4);
+    b.glowBall(0.03, '#ffd88a', 5, x, 0.36, 0.4);
+  }
+  b.light(0, 0.4, 0.45, '#ffe0a0', 2);
+}
+
+function museum(b, c, level) {
+  const stone = '#ddd6c8', stoneD = '#b8b0a0';
+  b.box(1.9, 0.04, 1.9, stoneD, 0, 0, 0, {}, 'rough');
+  // a wide stair, a colonnade and a great hall behind it
+  for (let k = 0; k < 4; k++) b.box(1.4 - k * 0.08, 0.035, 0.36 - k * 0.06, stone, 0, 0.04 + k * 0.035, 0.72 - k * 0.03);
+  const h = 0.78 + (level - 1) * 0.12;
+  b.box(1.5, h, 1.0, '#ece6da', 0, 0.04, -0.2);
+  for (let k = 0; k < 6; k++) b.cyl(0.045, 0.05, h - 0.06, stone, -0.6 + k * 0.24, 0.18, 0.42, {}, 'smooth', 8);
+  b.box(1.56, 0.07, 0.24, stone, 0, 0.04 + h + 0.0, 0.4);
+  b.prism(1.58, 0.3, 0.2, stone, 0, 0.11 + h, 0.4);
+  b.box(1.56, 0.07, 1.04, stoneD, 0, 0.04 + h, -0.2);
+  b.box(0.9, 0.24, 0.6, '#ece6da', 0, 0.11 + h, -0.3);
+  b.dome(0.36, '#5aa8a0', 0, 0.35 + h, -0.3, {}, 'smooth', 14);
+  b.glowBox(0.04, 0.05, 0.04, '#ffd23d', 4, 0, 0.7 + h, -0.3, {}, '#e2b33c', true);
+  // tall glowing windows behind the columns
+  for (let k = 0; k < 4; k++) b.glowBox(0.12, h * 0.5, 0.02, '#ffd8a0', 3, -0.42 + k * 0.28, 0.2, 0.31);
+  b.box(0.26, 0.4, 0.02, '#3a2a1a', 0, 0.18, 0.305);
+  // banners on the facade and a dinosaur skeleton in the garden
+  for (const [x, col] of [[-0.66, '#c94a3d'], [0.66, '#4a6ab0']]) {
+    b.box(0.1, 0.36, 0.01, col, x, 0.3, 0.31, {}, 'smooth');
+    b.box(0.1, 0.03, 0.012, '#ffd23d', x, 0.62, 0.312, {}, 'smooth');
+  }
+  const bone = '#f4efe2';
+  b.box(0.5, 0.04, 0.04, bone, 0.55, 0.32, 0.86, { rz: 0.1 }, 'smooth');
+  for (let k = 0; k < 5; k++) b.box(0.015, 0.1, 0.12, bone, 0.4 + k * 0.07, 0.26, 0.86, {}, 'smooth');
+  b.box(0.12, 0.06, 0.06, bone, 0.82, 0.38, 0.86, {}, 'smooth');
+  for (const x of [0.42, 0.68]) b.box(0.025, 0.28, 0.025, bone, x, 0.04, 0.86, {}, 'smooth');
+  b.box(0.14, 0.04, 0.02, bone, 0.24, 0.3, 0.86, { rz: -0.4 }, 'smooth');
+  b.box(0.36, 0.04, 0.2, stone, 0.55, 0.04, 0.86, {}, 'rough');
+  b.part(flagPart('#ffd23d', 0.012, 0.95 + h, -0.3, 0.2, 0.1));
+  b.cyl(0.01, 0.01, 0.25, DARK, 0, 0.7 + h, -0.3);
+  b.light(0, 0.5, 0.9, '#ffe0a0', 2.6);
+  b.light(-0.6, 0.4, 0.9, '#ffe0a0', 1.6);
+}
+
 const BUILDERS = {
   balai, vila, apartemen, ladang, penebang, tambang, nelayan, bijih, pasir, kristal, kincir, gudang, bengkel, pasar, kedai, toko,
   sumur, taman, lampu, pohon: pohonHias, bunga, bangku, airmancur, monumen, lumbung, rumahpohon: rumahPohon, observatorium, obelisk,
   menarajam: menaraJam, pohonkehidupan: pohonKehidupan,
   peternakan, kebun, penggergajian, tungku, kaca, klinik, sekolah, perpustakaan, taman_bermain: tamanBermain, panggung, menara_air: menaraAir,
+  pemadam, roti, lab, pelabuhan, bank, museum,
 };
 
 /**

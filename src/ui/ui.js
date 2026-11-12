@@ -13,6 +13,12 @@ import { TIERS } from '../game/perf.js';
 import { N, idx, tileCenter } from '../game/island.js';
 import { buzz } from '../platform.js';
 import NOXE_LICENSE from '../engine/LICENSE-noxe-pixel-engine.txt?raw';
+import { TownMixin } from './town.js';
+import { JuiceMixin } from './juice.js';
+import { TECHS } from '../game/systems.js';
+
+const TECH_IDS = TECHS.map((t) => t.id);
+const TECH_COST = Object.fromEntries(TECHS.map((t) => [t.id, t.cost]));
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -79,12 +85,14 @@ export class UI {
         <button class="ibtn sm" data-act="rotl">${icon('rotl')}</button>
         <button class="ibtn sm" data-act="rotr">${icon('rotr')}</button>
         <button class="ibtn sm" data-act="follow" id="btn-follow">${icon('center')}</button>
+        <button class="ibtn sm" data-act="photo">${icon('camera')}</button>
       </div>
       <div id="toolbar">
         <button class="tbtn" data-act="build">${icon('build')}<span>Build</span></button>
         <button class="tbtn" data-act="road">${icon('road')}<span>Road</span></button>
         <button class="tbtn" data-act="craft">${icon('craft')}<span>Craft</span></button>
         <button class="tbtn" data-act="market">${icon('market')}<span>Market</span></button>
+        <button class="tbtn" data-act="town" id="btn-town">${icon('town')}<span>Town</span><i class="badge hidden" id="b-town"></i><i class="tprog hidden" id="t-prog"><b></b></i></button>
       </div>
       <div id="placebar" class="hidden"></div>
       <div id="hint" class="hidden"></div>
@@ -216,7 +224,7 @@ export class UI {
       case 'wipe': this.confirmWipe(); break;
       case 'hint-ok': this.dismissHint(); break;
       case 'tab': this._tab(el); break;
-      default: break;
+      default: this._townClick(act, arg) || this._photoClick(act, arg); break;
     }
   }
 
@@ -228,7 +236,7 @@ export class UI {
     $('#lvl').textContent = P.level;
     const pct = Math.min(1, P.xp / xpForLevel(P.level));
     $('.ring').style.setProperty('--p', `${Math.round(pct * 100)}%`);
-    $('#c-coins span').textContent = fmt(P.coins);
+    if (force) this._coinShown = P.coins;
     const I = g.I;
     $('#c-pop span').textContent = `${I.npcs.length}/${g.housingCap()}`;
     const hap = Math.round(g.islandHappiness());
@@ -271,6 +279,16 @@ export class UI {
       eb.classList.remove('hidden');
     } else eb.classList.add('hidden');
     $('#btn-follow').classList.toggle('on', !!this.app.cam.follow);
+    // the Town button: ready orders and missions, and the running research
+    const nt = g.readyOrders() + g.claimableMissions();
+    const bt = $('#b-town');
+    bt.classList.toggle('hidden', !nt);
+    bt.textContent = nt;
+    const rc = s.research.cur;
+    const tp = $('#t-prog');
+    tp.classList.toggle('hidden', !rc);
+    if (rc) tp.firstChild.style.width = `${Math.min(100, Math.round(((Date.now() - rc.start) / Math.max(1, rc.end - rc.start)) * 100))}%`;
+    $('#btn-town').classList.toggle('glow', !rc && P.level >= 2 && !!this._anyTechOpen());
     // the indoor bar shows live status (who sleeps, bedtime)
     if (this.mode === 'interior' && this.app.interior.active) {
       const h = this.interiorBarHTML();
@@ -282,7 +300,16 @@ export class UI {
     if (this.panel?.live) this.panel.live();
   }
 
+  _anyTechOpen() {
+    const g = this.game;
+    this._techT = (this._techT || 0) + 1;
+    if (this._techT % 8 && this._techOpen !== undefined) return this._techOpen;
+    this._techOpen = TECH_IDS.some((id) => g.techStatus(id).state === 'open' && g.has(TECH_COST[id]));
+    return this._techOpen;
+  }
+
   update(dt) {
+    this._tickCoins(dt, fmt);
     this._hudT -= dt;
     if (this._hudT <= 0) {
       this._hudT = 0.25;
@@ -390,7 +417,11 @@ export class UI {
   openSheet(title, html, { live = null, wide = false, kind = '' } = {}) {
     const sh = $('#sheet');
     $('#sheet-title').innerHTML = title;
-    $('#sheet-body').innerHTML = html;
+    const body = $('#sheet-body');
+    body.innerHTML = html;
+    body.classList.add('fresh');
+    clearTimeout(this._freshT);
+    this._freshT = setTimeout(() => body.classList.remove('fresh'), 450);
     sh.className = wide ? 'wide' : '';
     sh.dataset.kind = kind;
     this.panel = { kind, live };
@@ -418,11 +449,12 @@ export class UI {
     host.querySelectorAll('[data-tab]').forEach((p) => p.classList.toggle('hidden', p.dataset.tab !== el.dataset.arg));
   }
 
-  costHTML(cost, mult = 1) {
+  /** Costs (red when the player is short) or, with reward = true, a plain list of what is given. */
+  costHTML(cost, mult = 1, reward = false) {
     const g = this.game;
     return Object.entries(cost || {}).map(([k, v]) => {
       const n = Math.ceil(v * mult);
-      const have = k === 'coins' ? g.s.player.coins : g.s.res[k] || 0;
+      const have = reward || k === 'xp' ? Infinity : k === 'coins' ? g.s.player.coins : g.s.res[k] || 0;
       return `<span class="cost ${have < n ? 'short' : ''}">${icon(resIcon(k))}${fmt(n)}</span>`;
     }).join('');
   }
@@ -469,7 +501,7 @@ export class UI {
     const [i, j] = this.placeTile;
     const chk = this.game.canPlace(this.placeType, i, j);
     this._placeChk = chk;
-    const rot = BUILDINGS[this.placeType].needWater && chk.ok ? this.game.waterRot(i, j) : this.placeRot;
+    const rot = BUILDINGS[this.placeType].needWater && chk.ok ? this.game.waterRot(i, j, this.game.I, BUILDINGS[this.placeType].size) : this.placeRot;
     this.world.setGhost(this.placeType, i, j, rot, chk.ok);
     this.renderPlacebar();
   }
@@ -527,6 +559,7 @@ export class UI {
   }
 
   exitMode() {
+    if (this.mode === 'photo') return this.exitPhoto();
     if (this.mode === 'furnish') return this.setFurnish(false);
     if (this.mode === 'interior') return this.app.leaveHouse();
     this.mode = 'explore';
@@ -777,6 +810,10 @@ export class UI {
   onTap(x, y) {
     const w = this.world, g = this.game;
     if (this.app.interior.active) return this.app.interior.onTap(x, y);
+    if (this.mode === 'photo') {
+      document.body.classList.toggle('photo-clean');
+      return;
+    }
     if (this.mode === 'place') {
       const t = w.pickTile(x, y);
       if (t) {
@@ -813,6 +850,14 @@ export class UI {
         this.openProfile();
         break;
       case 'building':
+        // a burning building: the Mayor runs over with a bucket straight away
+        if (g.fireOf(hit.rec) && w.mayor.task?.bid !== hit.rec.id) {
+          if (w.mayorFight(hit.rec)) {
+            this.sfx('pop');
+            this.toast('The Mayor grabs a bucket!', { icon: 'fire', ms: 1500 });
+          }
+          break;
+        }
         this.openBuilding(hit.rec);
         break;
       case 'node': {
@@ -849,6 +894,13 @@ export class UI {
   openBuilding(rec) {
     this.world.select(rec);
     this._bRec = rec;
+    // ease the camera part of the way toward the building
+    const c = this.world.buildingCenter(rec);
+    if (c && !this.app.cam.follow) {
+      const t = this.app.cam.goal.target;
+      t.x += (c.x - t.x) * 0.45;
+      t.z += (c.z - t.z) * 0.45;
+    }
     const render = () => {
       const g = this.game;
       const d = BUILDINGS[rec.type];
@@ -876,10 +928,12 @@ export class UI {
       if (d.storage) lines.push(`<div class="stat">${icon('storage')} Storage +${d.storage + (d.storagePerLevel || 0) * (lvl - 1)}</div>`);
       if (d.happy) lines.push(`<div class="stat">${icon('happy')} Happiness +${d.happy.amount} (radius ${d.happy.radius})</div>`);
       if (d.boost) lines.push(`<div class="stat">${icon('up')} Nearby farms +${Math.round(d.boost.amount * 100)}%</div>`);
-      const canUp = !d.fixed && !d.small && lvl < MAX_LEVEL && rec.built;
+      const canUp = !d.fixed && !d.small && lvl < MAX_LEVEL && rec.built && !rec.ruin;
       const upCost = canUp ? upgradeCost(d, lvl) : null;
-      const btns = [];
-      if (ENTERABLE.has(rec.type) && rec.built) btns.push(`<button class="btn primary" data-act="b-enter">${icon('enter')} ${rec.type === 'balai' ? "Enter the Mayor's house" : 'Go inside'}</button>`);
+      const extra = this._buildingExtras(rec);
+      lines.unshift(...extra.lines);
+      const btns = [...extra.btns];
+      if (ENTERABLE.has(rec.type) && rec.built && !rec.ruin) btns.push(`<button class="btn primary" data-act="b-enter">${icon('enter')} ${rec.type === 'balai' ? "Enter the Mayor's house" : 'Go inside'}</button>`);
       if (canUp) btns.push(`<button class="btn primary" data-act="b-upgrade">${icon('up')} Upgrade <span class="costs">${this.costHTML(upCost)}</span></button>`);
       if (rec.type === 'bengkel') btns.push(`<button class="btn" data-act="b-craft">${icon('craft')} Craft</button>`);
       if (rec.type === 'pasar') btns.push(`<button class="btn" data-act="b-market">${icon('market')} Trade</button>`);
@@ -1189,7 +1243,7 @@ export class UI {
           const [a, b] = g.goalProgress(q, gl);
           return `<div class="goal"><div class="bar"><i style="width:${Math.min(100, Math.round((a / b) * 100))}%"></i></div><small>${fmt(Math.min(a, b))}/${fmt(b)}</small></div>`;
         }).join('');
-        return `<div class="quest ${done ? 'done' : ''}"><div class="grow"><b>${esc(q.title)}</b><p>${esc(q.desc)}</p>${goals}<div class="costs">${this.costHTML(q.reward)}</div></div>
+        return `<div class="quest ${done ? 'done' : ''}"><div class="grow"><b>${esc(q.title)}</b><p>${esc(q.desc)}</p>${goals}<div class="costs">${this.costHTML(q.reward, 1, true)}</div></div>
           ${done ? `<button class="btn primary" data-act="quest-claim" data-arg="${q.id}">Claim</button>` : ''}</div>`;
       }).join('') + `<p class="muted">${g.s.quests.done.length}/${QUESTS.length} quests done</p>`;
     };
@@ -1220,7 +1274,7 @@ export class UI {
     const html = ACHIEVEMENTS.map((a) => {
       const v = g.statValue(a.stat);
       const done = !!g.s.ach[a.id];
-      return `<div class="ach ${done ? 'done' : ''}">${icon(done ? 'trophy' : 'lock', 'lg')}<div class="grow"><b>${esc(a.name)}</b><p>${esc(a.desc)}</p>${done ? '' : `<div class="bar"><i style="width:${Math.min(100, Math.round((v / a.n) * 100))}%"></i></div>`}${a.unlocks ? `<small class="muted">Unlocks: ${esc(a.unlocks)}</small>` : ''}</div><div class="costs">${this.costHTML(a.reward)}</div></div>`;
+      return `<div class="ach ${done ? 'done' : ''}">${icon(done ? 'trophy' : 'lock', 'lg')}<div class="grow"><b>${esc(a.name)}</b><p>${esc(a.desc)}</p>${done ? '' : `<div class="bar"><i style="width:${Math.min(100, Math.round((v / a.n) * 100))}%"></i></div>`}${a.unlocks ? `<small class="muted">Unlocks: ${esc(a.unlocks)}</small>` : ''}</div><div class="costs">${this.costHTML(a.reward, 1, true)}</div></div>`;
     }).join('');
     this.openSheet(`${icon('trophy')} Achievements ${got}/${ACHIEVEMENTS.length}`, html, { kind: 'ach' });
   }
@@ -1436,3 +1490,5 @@ export class UI {
     }
   }
 }
+
+Object.assign(UI.prototype, TownMixin, JuiceMixin);
