@@ -34,11 +34,18 @@ public class MainActivity extends BridgeActivity {
         if (hasFocus) hideSystemBars();
     }
 
-    /** Immersive full screen: system bars slide in with a swipe and hide again on their own. */
+    /**
+     * Full screen for the status bar only (it slides in with a swipe). The navigation bar stays visible so
+     * its buttons never sit on top of the game or the ad banner (v1.3): the AdMob plugin lifts the banner by
+     * the navigation bar inset itself, and Capacitor passes the same inset to CSS (--safe-area-inset-bottom),
+     * which moves the game UI above the bar and the banner.
+     */
     private void hideSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-        c.hide(WindowInsetsCompat.Type.systemBars());
+        c.hide(WindowInsetsCompat.Type.statusBars());
+        c.show(WindowInsetsCompat.Type.navigationBars());
+        getWindow().setNavigationBarColor(0xFF0B0D1A);
     }
 }

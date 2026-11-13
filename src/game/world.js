@@ -2558,7 +2558,7 @@ export class World {
     F.emT -= dt;
     if (F.emT <= 0) {
       F.emT = 0.7;
-      if (ev.npc) this._evEmote(ev.npc, 'cake');
+      if (ev.npc) this._evEmote(ev.npc, 'home');
       if (ev.sick) for (const id of ev.sick) this._evEmote(id, 'sickness');
     }
   }

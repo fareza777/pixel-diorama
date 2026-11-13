@@ -1296,7 +1296,7 @@ export class Game {
     if (ev.props?.length) lines.push(reason === 'done' ? `Found all ${ev.props.length}!` : `Found ${ev.found || 0} of ${ev.props.length}.`);
     if (ev.sick) lines.push(ev.sick.length ? `${ev.total - ev.sick.length} of ${ev.total} villagers recovered.` : 'Everyone is healthy again!');
     if (ev.burned) lines.push(`Burned ${ev.burned} wood to keep warm.`);
-    if (ev.id === 'birthday') lines.push(ev.gifted ? 'The birthday was a hit!' : 'Nobody brought a present...');
+    if (ev.id === 'birthday') lines.push(ev.gifted ? 'The housewarming was a hit!' : 'Nobody brought a gift...');
     const extra = {};
     for (const [k, v] of Object.entries(ev.gain || {})) if (Math.round(v) > 0) extra[k] = Math.round(v);
     return { title, text: lines.join(' '), reward, extra, big };
@@ -1354,7 +1354,7 @@ export class Game {
     if (!ev.sick.length && EVENT_BY_ID[ev.id].endWhenDone) this.endEvent('done');
   }
 
-  /** Gifts during events: the birthday villager, or curing a sick one. */
+  /** Gifts during events: the housewarming villager, or curing a sick one. */
   _eventGift(p) {
     const ev = this.eventHere();
     if (!ev) return;

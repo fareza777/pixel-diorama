@@ -1397,7 +1397,7 @@ export class UI {
     prog += this.hazardNote(ev, def);
     if (ev.id === 'birthday') {
       const p = g.I.npcs.find((q) => q.id === ev.npc);
-      if (p) prog = `<p><b>Birthday: ${esc(p.name)}</b>${ev.gifted ? ' · present given' : ''}</p>`;
+      if (p) prog = `<p><b>New home: ${esc(p.name)}</b>${ev.gifted ? ' · gift given' : ''}</p>`;
     }
     if (ev.id === 'royal') prog += `<p>Happiness now: <b>${Math.round(g.islandHappiness())}%</b> (needs 60%)</p>`;
     this.openSheet(

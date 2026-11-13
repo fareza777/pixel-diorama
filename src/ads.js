@@ -1,8 +1,8 @@
 // AdMob (v1.3): a bottom banner during play, an occasional interstitial at natural breaks (island
 // travel) and opt-in rewarded ads. Every id below is Google's public TEST id: swap them (and the app id
 // in android/app/src/main/res/values/strings.xml) for your own units before publishing.
-// The banner sits above the system navigation buttons and the game UI moves up by its height (--ad-h),
-// so it never covers any button. In the browser (development) ads are simulated.
+// The navigation bar always stays visible (MainActivity); the plugin places the banner right above it and
+// the game UI moves up by the banner height (--ad-h), so the banner never covers any button. In the browser (development) ads are simulated.
 import { Capacitor } from '@capacitor/core';
 
 export const AD_UNITS = {
@@ -20,16 +20,6 @@ let ready = false, bannerOn = false, bannerWanted = false;
 let lastInterstitial = 0;
 const sessionStart = Date.now();
 const root = document.documentElement;
-
-/** The system navigation area in CSS px (dp), measured from the safe-area variable. */
-function navInset() {
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;bottom:0;height:var(--sab0);width:1px;visibility:hidden;pointer-events:none';
-  document.body.appendChild(probe);
-  const h = probe.getBoundingClientRect().height;
-  probe.remove();
-  return Math.round(h);
-}
 
 export async function initAds() {
   if (!native) {
@@ -64,7 +54,7 @@ export async function showBanner() {
   if (!ready || bannerOn) return;
   if (!native) return;
   try {
-    await AdMob.showBanner({ adId: AD_UNITS.banner, adSize: E.BannerAdSize.ADAPTIVE_BANNER, position: E.BannerAdPosition.BOTTOM_CENTER, margin: navInset(), isTesting: TESTING });
+    await AdMob.showBanner({ adId: AD_UNITS.banner, adSize: E.BannerAdSize.ADAPTIVE_BANNER, position: E.BannerAdPosition.BOTTOM_CENTER, margin: 0, isTesting: TESTING });
     bannerOn = true;
   } catch (e) {
     console.warn('banner', e);

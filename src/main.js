@@ -235,7 +235,7 @@ class App {
       this.audio.play('chord', { notes: [67, 72, 76, 79], dur: 2.5, gain: 0.04 });
       const rt = w.npcRuntime(p.id);
       if (rt) this._burstAt(rt.pos);
-      ui.queueModal(() => ui.modal(`<div class="burst"></div>${evIcon('cake')}<h2>Happy Birthday, ${escH(p.name)}!</h2><p>"A present for me? You are the best Mayor ever!" ${escH(p.name)} is now a very close friend.</p>${ui.rewardHTML(got)}<button class="btn primary big" data-act="modal-ok">Hooray!</button>`, { cls: 'celebrate' }));
+      ui.queueModal(() => ui.modal(`<div class="burst"></div>${evIcon('home')}<h2>Welcome home, ${escH(p.name)}!</h2><p>"A housewarming gift for me? You are the best Mayor ever!" ${escH(p.name)} is now a very close friend.</p>${ui.rewardHTML(got)}<button class="btn primary big" data-act="modal-ok">Hooray!</button>`, { cls: 'celebrate' }));
       this.saveSoon();
     });
     g.on('event:cure', ({ p, byMayor, left }) => {

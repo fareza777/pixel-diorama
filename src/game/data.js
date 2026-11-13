@@ -578,7 +578,7 @@ export const ACHIEVEMENTS = [
 //     gather: [h0, h1] villagers gather at the plaza (gatherFor: only the first N hours), pose
 //     burnWood: wood burned per lived-in home per hour
 //   props { kind, n, perHour, max }: tappable things the Mayor walks up to (see Game.collectEventProp)
-//   host: a visiting character the Mayor can greet; npc: 'birthday' | 'sick'; prize: reward at the end
+//   host: a visiting character the Mayor can greet; npc: 'birthday' (housewarming) | 'sick'; prize: reward at the end
 //   endWhenDone: the event ends as soon as every prop is found (or every villager is cured)
 export const EVENTS = [
   // ---- the originals
@@ -666,11 +666,12 @@ export const EVENTS = [
     fx: { mood: 8, fun: 2.5, gather: [9, 20], gatherFor: 2.5, pose: 'clap' }, host: 'bard',
   },
   {
-    id: 'birthday', name: 'Birthday Party', icon: 'cake', kind: 'good', hours: 8, weight: 2, minPop: 3, start: [8, 15],
-    desc: 'It is a villager\'s birthday! Give them a gift for big friendship.',
-    flavor: 'Balloons, candles and a big cake. Someone special turns a year older today!',
-    effect: ['Gift the birthday villager: triple friendship and a present', 'Happiness +5'],
-    tip: 'Look for the cake bubble, tap the villager and choose Gift.',
+    // (save id 'birthday' kept for old saves; since v1.3 this is a housewarming)
+    id: 'birthday', name: 'Housewarming', icon: 'home', kind: 'good', hours: 8, weight: 2, minPop: 3, start: [8, 15],
+    desc: 'A villager is settling into their home! Bring them a gift for big friendship.',
+    flavor: 'Fresh curtains, a full pantry and neighbours dropping by with food. Someone is finally at home!',
+    effect: ['Gift the villager: triple friendship and a present', 'Happiness +5'],
+    tip: 'Look for the house bubble, tap the villager and choose Gift.',
     fx: { mood: 5 }, npc: 'birthday',
   },
   {
