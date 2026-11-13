@@ -502,7 +502,6 @@ export class World {
     const groups = new Map();
     for (const [key, n] of Object.entries(I.nodes)) {
       if (n.hp === 0) continue;
-      if (I.seen && !I.seen[key]) continue; // hidden under the clouds: not drawn at all
       const g = `${n.k}:${n.v}`;
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(+key);
@@ -699,9 +698,8 @@ export class World {
       this.flowers.material.dispose();
       this.flowers = null;
     }
-    // grass only on explored land, as dense as before the islands grew
-    const seenTiles = I.seen ? I.seen.reduce((a, v) => a + v, 0) : N * N;
-    const count = Math.round(1500 * this.quality.grass * Math.min(2.2, seenTiles / 484));
+    // as dense as before the islands grew (1500 blades on 22x22 tiles), capped for phones
+    const count = Math.round(1500 * this.quality.grass * Math.min(1.8, (N * N) / 484));
     if (count < 50) return;
     const occ = this.game.occ;
     const rand = K.rng(I.seed + 99);
@@ -711,7 +709,6 @@ export class World {
       const k = idx(i, j);
       const t = I.t[k];
       if (t !== 'g' && t !== 'm') return null;
-      if (I.seen && !I.seen[k]) return null;
       if (occ[k] && !['taman'].includes(this.buildings.get(occ[k])?.rec.type)) return null;
       return [x, I.h[k], z];
     };
@@ -3172,18 +3169,12 @@ export class World {
     this.game.reveal(i + 0.5, j + 0.5, MAYOR_SIGHT);
   }
 
-  /** New land was explored: lift its clouds, then (batched) draw its trees and grass. */
+  /** New land was explored: its mist thins out and clears. */
   onReveal(keys) {
     this.fog?.reveal(keys);
-    clearTimeout(this._revealTimer);
-    this._revealTimer = setTimeout(() => {
-      if (!this.scene) return;
-      this.rebuildNodes();
-      this._grassDirty = true;
-    }, 900);
   }
 
-  /** Under the clouds every tap is just "walk there" (exploring); nothing else can be picked. */
+  /** In the mist every tap is just "walk there" (exploring); nothing else can be picked. */
   _fogPick(hit) {
     const I = this.I;
     if (!hit || !I.seen) return hit;

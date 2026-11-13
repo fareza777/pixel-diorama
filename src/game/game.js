@@ -75,7 +75,7 @@ export class Game {
       event: null,
       eventCd: 6,
       weather: {},
-      settings: { sound: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true, shake: true, tilt: false, gfx13: true, voice: true, fog: 'clouds' },
+      settings: { sound: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true, shake: true, tilt: false, gfx13: true, voice: true },
       tips: 0,
       tutorial: 0,
       furn: {}, // furniture in storage: id -> count
@@ -387,7 +387,7 @@ export class Game {
     if (!this.biomeAllows(type)) return { ok: false, reason: "Can't be built on this island" };
     if (def.limit && this.countType(type, I) >= def.limit) return { ok: false, reason: 'Only one per island' };
     const s = def.size;
-    if (!this.footprintSeen(i, j, s, I)) return { ok: false, reason: 'Explore this area first: walk there or build a Scout Tower' };
+    if (!this.footprintSeen(i, j, s, I)) return { ok: false, reason: 'Explore this misty land first: walk there or build a Scout Tower' };
     let hMax = -99, hMin = 99;
     for (let a = 0; a < s; a++)
       for (let b = 0; b < s; b++) {

@@ -1,8 +1,8 @@
 // Fog of war (v1.3). Game side (FogMixin, mixed into Game): which tiles are explored, revealing land
 // around the Mayor, buildings and Scout Towers, and small discovery rewards. World side (FogLayer):
-// a soft sea of instanced cloud puffs over unexplored tiles that shrink away as the land is revealed.
+// a thin drifting mist over unexplored land that clears as the land is revealed.
 import * as THREE from 'three';
-import { shared } from '../engine/materials.js';
+import { shared, fxMaterial } from '../engine/materials.js';
 import { BUILDINGS } from './data.js';
 import { N, idx, inside, tileCenter, revealArea } from './island.js';
 
@@ -51,7 +51,7 @@ export const FogMixin = {
     const t = I.t[k];
     return t !== 'w' && t !== 'r' && !I.nodes[k] && !this.occ?.[k];
   },
-  /** A building site and a finished Scout Tower clear the clouds around them. */
+  /** A building site and a finished Scout Tower clear the mist around them. */
   revealForBuilding(rec, done = false) {
     const def = BUILDINGS[rec.type], s = def.size || 1;
     const r = (done && def.scout) || BUILD_SIGHT + s / 2;
@@ -65,137 +65,154 @@ export const FogMixin = {
   },
 };
 
-// ---------------------------------------------------------------- clouds (world side)
+// ---------------------------------------------------------------- thin mist (world side)
 
-const PUFFS = 1; // per tile (big, overlapping puffs read as one soft cloud bank)
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
-const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
-const hash = (k, n) => {
-  const x = Math.sin(k * 127.1 + n * 311.7) * 43758.5453;
-  return x - Math.floor(x);
-};
+const RES2 = 2; // fog texture cells per tile (the field is blurred, so edges stay soft)
+const FADE = 1.1; // seconds for revealed land to clear
+const LAYERS = [
+  { lift: 0.12, alpha: 0.34, scale: 4.2, speed: 0.05 },
+  { lift: 0.55, alpha: 0.2, scale: 2.6, speed: -0.035 },
+];
+
+const MIST_VERT = /* glsl */`
+  varying vec2 vUv;
+  varying vec3 vW;
+  void main() {
+    vUv = uv;
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vW = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }`;
+const MIST_FRAG = /* glsl */`
+  uniform sampler2D uFog;
+  uniform float uTime;
+  uniform float uDaylight;
+  uniform float uAlpha;
+  uniform float uScale;
+  uniform float uSpeed;
+  varying vec2 vUv;
+  varying vec3 vW;
+  float h2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+  float n2(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  void main() {
+    float f = texture(uFog, vUv).r;
+    if (f < 0.01) discard;
+    // slow drifting wisps: two octaves of noise moving in different directions
+    vec2 p = vW.xz / uScale;
+    float wisp = n2(p + vec2(uTime * uSpeed, uTime * uSpeed * 0.6)) * 0.65 + n2(p * 2.3 - vec2(uTime * uSpeed * 1.7, 0.0)) * 0.35;
+    float a = f * uAlpha * smoothstep(0.15, 0.85, wisp) * 1.6;
+    vec3 day = vec3(0.86, 0.9, 0.98);
+    vec3 night = vec3(0.16, 0.19, 0.3);
+    gl_FragColor = vec4(mix(night, day, uDaylight), clamp(a, 0.0, 0.62));
+    gNormal = vec4(0.0);
+  }`;
 
 /**
- * Cheap, opaque cloud shading: white tops, soft blue-grey undersides, dimmed and cooled at night.
- * No lights or shadows (the cloud bank covers a lot of screen, so the fragment cost matters on phones).
+ * Thin, drifting mist over unexplored land (v1.3): two translucent layers that follow the ground,
+ * driven by a small blurred fog texture, so the edge of the known world is soft and the land beneath
+ * still shows through. Revealed land clears with a short fade.
  */
-function cloudMaterial() {
-  return new THREE.ShaderMaterial({
-    uniforms: { uDaylight: shared.uDaylight, uDark: { value: 0 } },
-    vertexShader: /* glsl */`
-      attribute vec3 color;
-      varying vec3 vC;
-      varying float vUp;
-      void main() {
-        vC = color;
-        vUp = normalize(mat3(modelMatrix * instanceMatrix) * normal).y;
-        gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: 'layout(location = 1) out highp vec4 gNormal;\n' + /* glsl */`
-      uniform float uDaylight;
-      uniform float uDark;
-      varying vec3 vC;
-      varying float vUp;
-      void main() {
-        float shade = 0.72 + 0.28 * smoothstep(-0.4, 0.8, vUp);
-        vec3 day = vC * shade * 1.05;
-        vec3 night = vC * shade * vec3(0.16, 0.19, 0.3);
-        vec3 c = mix(night, day, uDaylight);
-        // 'Dark' fog style: a deep blue-black veil with a faint lighter top
-        vec3 dark = vec3(0.045, 0.05, 0.085) + vec3(0.03, 0.035, 0.06) * smoothstep(0.2, 1.0, vUp);
-        gl_FragColor = vec4(mix(c, dark, uDark), 1.0);
-        gNormal = vec4(0.0);
-      }`,
-  });
-}
-
-/** A low-poly puff, white on top and soft blue-grey underneath (vertex colours). */
-function puffGeometry() {
-  const g = new THREE.IcosahedronGeometry(0.5, 0); // 20 triangles, smooth normals keep it round
-  const pos = g.attributes.position, n = pos.count;
-  const col = new Float32Array(n * 3);
-  const top = new THREE.Color('#ffffff'), bot = new THREE.Color('#c9d2ec'), c = new THREE.Color();
-  for (let i = 0; i < n; i++) {
-    const y = pos.getY(i);
-    pos.setY(i, y * 0.72);
-    c.copy(bot).lerp(top, Math.min(1, Math.max(0, y + 0.5)));
-    col.set([c.r, c.g, c.b], i * 3);
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.computeVertexNormals();
-  return g;
-}
-
 export class FogLayer {
   constructor(world) {
     this.world = world;
     const I = world.I;
-    // only fogged tiles take instance slots (compacted as land is revealed), so the GPU never draws hidden puffs
-    this.tiles = [];
-    this.slot = new Map(); // tile key -> index in this.tiles
-    if (I.seen) for (let k = 0; k < N * N; k++) if (!I.seen[k]) {
-      this.slot.set(k, this.tiles.length);
-      this.tiles.push(k);
-    }
-    this.mesh = new THREE.InstancedMesh(puffGeometry(), cloudMaterial(), Math.max(1, this.tiles.length * PUFFS));
-    this.mesh.frustumCulled = false;
-    this.mesh.castShadow = false;
-    this.mesh.receiveShadow = false;
+    const R = N * RES2;
+    this.R = R;
+    this.amount = new Float32Array(N * N); // per tile, 1 = fogged
+    if (I.seen) for (let k = 0; k < N * N; k++) this.amount[k] = I.seen[k] ? 0 : 1;
+    this.data = new Uint8Array(R * R * 4);
+    this.tex = new THREE.DataTexture(this.data, R, R, THREE.RGBAFormat);
+    this.tex.magFilter = THREE.LinearFilter;
+    this.tex.minFilter = THREE.LinearFilter;
     this.fading = new Map(); // tile key -> time left
-    this.tiles.forEach((k, n) => this._write(n, k, 1));
-    this.mesh.count = this.tiles.length * PUFFS;
-    this.mesh.instanceMatrix.needsUpdate = true;
-  }
-
-  _write(slot, k, f) {
-    const i = Math.floor(k / N), j = k % N;
-    const [x, z] = tileCenter(i, j);
-    const h = Math.max(0.25, this.world.tileH(i, j));
-    for (let n = 0; n < PUFFS; n++) {
-      const s = (1.35 + hash(k, n) * 0.5) * (0.25 + 0.75 * f);
-      const y = h + 0.35 + hash(k, n + 7) * 0.35 + (1 - f) * 0.6;
-      _m.compose(_p.set(x + (hash(k, n + 3) - 0.5) * 0.55, y, z + (hash(k, n + 5) - 0.5) * 0.55), _q, _s.set(s, s, s));
-      this.mesh.setMatrixAt(slot * PUFFS + n, f > 0.001 ? _m : ZERO);
+    this._bake();
+    this.mesh = new THREE.Group();
+    this.mats = [];
+    for (const L of LAYERS) {
+      const mat = fxMaterial({
+        vertexShader: MIST_VERT,
+        fragmentShader: MIST_FRAG,
+        uniforms: { uFog: { value: this.tex }, uTime: shared.uTime, uDaylight: shared.uDaylight, uAlpha: { value: L.alpha }, uScale: { value: L.scale }, uSpeed: { value: L.speed } },
+      });
+      const m = new THREE.Mesh(this._sheet(L.lift), mat);
+      m.renderOrder = 5;
+      m.frustumCulled = false;
+      this.mesh.add(m);
+      this.mats.push(mat);
     }
+    this.mesh.visible = this.amount.some((v) => v > 0);
   }
 
-  /** Remove a tile's slot by moving the last tile into it. */
-  _drop(k) {
-    const at = this.slot.get(k);
-    if (at === undefined) return;
-    const last = this.tiles.pop();
-    this.slot.delete(k);
-    if (last !== k) {
-      this.tiles[at] = last;
-      this.slot.set(last, at);
-      this._write(at, last, this.fading.has(last) ? this.fading.get(last) / 0.7 : 1);
+  /** A grid over the island that hugs the terrain (each vertex sits above the highest nearby tile). */
+  _sheet(lift) {
+    const g = new THREE.PlaneGeometry(N, N, N, N);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position, uv = g.attributes.uv;
+    for (let v = 0; v < pos.count; v++) {
+      const x = pos.getX(v), z = pos.getZ(v);
+      const ci = Math.round(x + N / 2), cj = Math.round(z + N / 2);
+      let h = 0;
+      for (let a = -1; a <= 0; a++) for (let b = -1; b <= 0; b++) {
+        const i = Math.min(N - 1, Math.max(0, ci + a)), j = Math.min(N - 1, Math.max(0, cj + b));
+        h = Math.max(h, this.world.tileH(i, j));
+      }
+      pos.setY(v, Math.max(0.05, h) + lift);
+      // texture rows follow tile i (x), columns tile j (z)
+      uv.setXY(v, (z + N / 2) / N, (x + N / 2) / N);
     }
-    this.mesh.count = this.tiles.length * PUFFS;
+    g.computeVertexNormals();
+    return g;
   }
 
-  /** Newly explored tiles: their clouds shrink and lift away. */
+  /** Write the per-tile amounts into the texture with a soft 3x3 blur at double resolution. */
+  _bake() {
+    const R = this.R, A = this.amount, d = this.data;
+    const at = (i, j) => A[Math.min(N - 1, Math.max(0, i)) * N + Math.min(N - 1, Math.max(0, j))];
+    for (let y = 0; y < R; y++)
+      for (let x = 0; x < R; x++) {
+        const fi = (y + 0.5) / RES2 - 0.5, fj = (x + 0.5) / RES2 - 0.5;
+        const i0 = Math.floor(fi), j0 = Math.floor(fj), ti = fi - i0, tj = fj - j0;
+        let v = 0, w = 0;
+        for (let a = -1; a <= 2; a++) for (let b = -1; b <= 2; b++) {
+          const wt = Math.max(0, 1.5 - Math.hypot(a - ti, b - tj));
+          v += at(i0 + a, j0 + b) * wt;
+          w += wt;
+        }
+        const o = (y * R + x) * 4;
+        d[o] = Math.round((v / w) * 255);
+        d[o + 3] = 255;
+      }
+    this.tex.needsUpdate = true;
+  }
+
+  /** Newly explored tiles: their mist thins out and clears. */
   reveal(keys) {
-    for (const k of keys) if (this.slot.has(k)) this.fading.set(k, 0.7);
+    for (const k of keys) if (this.amount[k] > 0) this.fading.set(k, FADE);
   }
 
   update(dt) {
-    this.mesh.material.uniforms.uDark.value = this.world.game.s.settings.fog === 'dark' ? 1 : 0;
     if (!this.fading.size) return;
     for (const [k, t] of this.fading) {
       const left = t - dt;
-      if (left <= 0) {
-        this.fading.delete(k);
-        this._drop(k);
-      } else {
-        this.fading.set(k, left);
-        this._write(this.slot.get(k), k, left / 0.7);
-      }
+      this.amount[k] = Math.max(0, left / FADE);
+      if (left <= 0) this.fading.delete(k);
+      else this.fading.set(k, left);
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
+    this._bakeT = (this._bakeT || 0) - dt;
+    if (this._bakeT <= 0 || !this.fading.size) {
+      this._bakeT = 0.08;
+      this._bake();
+    }
+    if (!this.fading.size) this.mesh.visible = this.amount.some((v) => v > 0);
   }
 
   dispose() {
-    this.mesh.geometry.dispose();
-    this.mesh.material.dispose();
+    for (const m of this.mesh.children) m.geometry.dispose();
+    for (const mat of this.mats) mat.dispose();
+    this.tex.dispose();
   }
 }

@@ -297,7 +297,7 @@ export const BUILDINGS = {
   // ---- v1.3: exploring and keeping the wild animals away
   scout: {
     name: 'Scout Tower', cat: 'service', size: 1, cost: { coins: 120, wood: 30 }, unlock: 2,
-    desc: 'A tall wooden lookout. When it is finished it clears the clouds for 7 tiles around it.', scout: 7,
+    desc: 'A tall wooden lookout. When it is finished it clears the mist for 7 tiles around it.', scout: 7,
   },
   guard: {
     name: 'Guard Post', cat: 'service', size: 1, cost: { coins: 160, wood: 30, stone: 20 }, unlock: 3,

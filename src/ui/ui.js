@@ -917,7 +917,7 @@ export class UI {
         w.mayorGoTo(hit.i, hit.j);
         if (hit.fog && !g.s.tipFog) {
           g.s.tipFog = 1;
-          this.toast('Walk into the clouds to explore new land!', { icon: 'map', ms: 2600 });
+          this.toast('Walk into the mist to explore new land!', { icon: 'map', ms: 2600 });
         }
         break;
     }
@@ -1452,7 +1452,6 @@ export class UI {
       <div class="setting"><span>Game speed</span><div class="segs">${opt('speed', 1, '1x')}${opt('speed', 2, '2x')}${opt('speed', 3, '3x')}</div></div>
       <div class="setting"><span>Vibration</span><div class="segs">${opt('haptics', true, 'On')}${opt('haptics', false, 'Off')}</div></div>
       <div class="setting"><span>Screen shake</span><div class="segs">${opt('shake', true, 'On')}${opt('shake', false, 'Off')}</div></div>
-      <div class="setting"><span>${icon('cloud')} Fog style</span><div class="segs">${opt('fog', 'clouds', 'Clouds')}${opt('fog', 'dark', 'Dark')}</div></div>
       <div class="setting"><span>Miniature focus</span><div class="segs">${opt('tilt', true, 'On')}${opt('tilt', false, 'Off')}</div></div>
       <div class="setting"><span>Show FPS</span><div class="segs">${opt('fps', true, 'Yes')}${opt('fps', false, 'No')}</div></div>
       <div class="btns"><button class="btn" data-act="journal">${icon('quest')} Journal</button><button class="btn" data-act="credits">${icon('info')} Credits & Licenses</button><button class="btn" data-act="menu-privacy">${icon('eye')} Ad privacy</button><button class="btn danger" data-act="wipe">${icon('trash')} Delete Data</button></div>

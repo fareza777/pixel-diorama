@@ -115,7 +115,7 @@ export class Wildlife {
       const k = idx(i, j);
       if (!ok(k)) continue;
       if (I.seen && !I.seen[k]) {
-        // just inside the clouds, next to explored land
+        // just inside the mist, next to explored land
         if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => inside(i + a, j + b) && I.seen[idx(i + a, j + b)])) return [i, j];
       } else if (i === 0 || j === 0 || i === N - 1 || j === N - 1) return [i, j];
     }
