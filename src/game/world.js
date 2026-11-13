@@ -217,6 +217,34 @@ function quadMaterial(color) {
   });
 }
 
+/** Where the Mayor is walking to: a dot, a ring and two ripples that spread out and fade (v1.3). */
+function markerMaterial(color) {
+  return fxMaterial({
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uColor;
+      uniform float uLife;
+      varying vec2 vUv;
+      void main() {
+        float d = length(vUv * 2.0 - 1.0);
+        float t = 1.0 - uLife;
+        float a = 0.0;
+        for (int k = 0; k < 2; k++) {
+          float ph = fract(t * 1.4 + float(k) * 0.5);
+          a += smoothstep(0.08, 0.0, abs(d - (0.3 + ph * 0.65))) * (1.0 - ph) * 0.8;
+        }
+        a += smoothstep(0.07, 0.0, abs(d - 0.36)) * 0.95;
+        a += (1.0 - smoothstep(0.1, 0.15, d)) * 0.95;
+        a *= smoothstep(0.0, 0.3, uLife) * step(d, 1.0);
+        gl_FragColor = vec4(uColor * 1.5, clamp(a, 0.0, 1.0));
+        gNormal = vec4(0.0);
+      }`,
+    uniforms: { uColor: { value: new THREE.Color(color) }, uLife: { value: 0 } },
+  });
+}
+
 // ---------------------------------------------------------------- world
 
 export class World {
@@ -291,7 +319,7 @@ export class World {
     this.ghostQuad.visible = false;
     this.ghostQuad.renderOrder = 3;
     this.root.add(this.ghostQuad);
-    this.markerQuad = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8), quadMaterial('#86b8e8'));
+    this.markerQuad = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), markerMaterial('#86b8e8'));
     this.markerQuad.rotation.x = -Math.PI / 2;
     this.markerQuad.visible = false;
     this.root.add(this.markerQuad);
@@ -2832,6 +2860,10 @@ export class World {
     this.bursts.update(dt);
     if (this._markerT > 0) {
       this._markerT -= dt;
+      const life = Math.max(0, this._markerT / 1.2);
+      this.markerQuad.material.uniforms.uLife.value = life;
+      const pop = 0.7 + 0.3 * Math.min(1, (1 - life) * 6);
+      this.markerQuad.scale.set(pop, pop, 1);
       if (this._markerT <= 0) this.markerQuad.visible = false;
     }
 

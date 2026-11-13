@@ -71,3 +71,46 @@ body.cine #title, body.cine #hud, body.cine #side, body.cine #camctl, body.cine 
 .chap.locked { opacity: 0.55; }
 .chap-n { flex: none; width: 1.9em; height: 1.9em; display: grid; place-items: center; border-radius: 50%; background: rgba(0, 0, 0, 0.35); font-weight: 900; color: #ffd23d; }
 .about p { line-height: 1.45; }
+
+/* ---------------- v1.3 compact HUD: one status bar, one resource strip, one info row */
+.topbar { display: flex; align-items: center; gap: 0.1em; width: 100%; max-width: 34em; margin: 0 auto; padding: 3px 3px 3px 3px; border-radius: 15px; background: var(--panel); border: 2px solid var(--ink); box-shadow: var(--bevel), var(--drop); }
+.topbar .chip { background: none; border: none; box-shadow: none; padding: 0.15em 0.32em; gap: 0.25em; font-size: 0.9em; }
+.topbar .chip .ic { width: 1.15em; height: 1.15em; }
+.topbar .ring { width: 2.25em; height: 2.25em; border-width: 2px; }
+.topbar .ring b { font-size: 0.82em; }
+.topbar .lvl { margin-right: 0.15em; }
+.topbar .clock { background: rgba(6, 8, 22, 0.35); border-radius: 9px; padding: 0.25em 0.4em; font-size: 0.8em; }
+.topbar .clock .ic { width: 1.25em; height: 1.25em; }
+.topbar .chip.low span { color: var(--red); }
+.menubtn { position: relative; flex: none; display: grid; place-items: center; width: 2.35em; height: 2.35em; margin-left: 0.2em; border-radius: 11px; background: linear-gradient(180deg, #4a5490, #353d70); border: 2px solid var(--ink); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.2), 0 2px 0 rgba(4, 6, 16, 0.6); }
+.menubtn .ic { width: 1.35em; height: 1.35em; }
+.menubtn.on { background: linear-gradient(180deg, #4b7fd8, #2f5aa8); }
+.menubtn:active { transform: translateY(2px); }
+.menubtn .badge { top: -0.5em; right: -0.5em; }
+.resrow { display: flex; align-items: center; gap: 0; width: max-content; max-width: 100%; margin: 0.35em auto 0; padding: 1px 4px; border-radius: 11px; background: rgba(14, 17, 38, 0.78); border: 2px solid rgba(6, 8, 22, 0.9); box-shadow: 0 2px 0 rgba(4, 6, 16, 0.4); }
+.resrow .chip { background: none; border: none; box-shadow: none; padding: 0.15em 0.4em; font-size: 0.82em; gap: 0.25em; }
+.resrow .chip + .chip { border-left: 1px solid rgba(255, 255, 255, 0.08); border-radius: 0; }
+.resrow .chip .ic { width: 1.1em; height: 1.1em; }
+.resrow .chip.more { border-style: none; border-left: 1px solid rgba(255, 255, 255, 0.08); }
+.inforow { display: flex; align-items: center; justify-content: center; gap: 0.35em; margin-top: 0.35em; }
+.inforow .banner { margin: 0; flex: none; max-width: 46%; font-size: 0.76em; padding: calc(0.3em - 1px) calc(0.55em - 2px); gap: 0.35em; }
+.inforow .banner b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inforow .banner .ic { width: 1.3em; height: 1.3em; }
+.inforow #story { margin: 0; flex: 0 1 auto; min-width: 0; font-size: 0.76em; }
+.inforow #story span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* dropdown menu under the menu button */
+#side { top: calc(var(--sat) + 3.55em); right: calc(var(--sar) + 0.6em); transform: none; gap: 2px; min-width: 12.5em; padding: 6px; border-radius: 15px; background: var(--panel2); border: 2px solid var(--ink); box-shadow: var(--bevel), 0 8px 24px rgba(0, 0, 0, 0.55); z-index: 4; transform-origin: top right; animation: menudrop 0.18s cubic-bezier(0.2, 1.3, 0.4, 1); }
+#side.hidden { display: none; }
+@keyframes menudrop { from { transform: translateY(-6px) scale(0.96); opacity: 0; } }
+.mitem { position: relative; display: flex; align-items: center; gap: 0.65em; min-height: 42px; padding: 0.35em 0.6em; border-radius: 10px; font-weight: 800; font-size: 0.92em; color: #e8ecff; text-align: left; }
+.mitem:active { background: rgba(255, 255, 255, 0.08); }
+.mitem .ic { width: 1.45em; height: 1.45em; }
+.mitem .badge { position: static; margin-left: auto; animation: none; }
+.mitem + .mitem { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+
+/* camera controls fold out of one button */
+#camctl { bottom: calc(var(--sab) + 9.2em); flex-direction: column-reverse; gap: 0.4em; }
+#camctl .camset { display: none; flex-direction: column; gap: 0.4em; animation: menudrop 0.18s ease-out; }
+#camctl.open .camset { display: flex; }
+#camctl.open .camtoggle { background: linear-gradient(180deg, #4b7fd8, #2f5aa8); }

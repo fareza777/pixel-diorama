@@ -3,6 +3,27 @@
 // Horizontal runs of the same colour are merged into one rect to keep the URIs small.
 
 const ICONS = {
+  menu: {
+    p: { k: '#141833', W: '#f4f6ff', w: '#b8c0e0' },
+    r: [
+      '................',
+      '................',
+      '..kkkkkkkkkkkk..',
+      '..kWWWWWWWWWWk..',
+      '..kwwwwwwwwwwk..',
+      '..kkkkkkkkkkkk..',
+      '..kkkkkkkkkkkk..',
+      '..kWWWWWWWWWWk..',
+      '..kwwwwwwwwwwk..',
+      '..kkkkkkkkkkkk..',
+      '..kkkkkkkkkkkk..',
+      '..kWWWWWWWWWWk..',
+      '..kwwwwwwwwwwk..',
+      '..kkkkkkkkkkkk..',
+      '................',
+      '................',
+    ],
+  },
   coin: {
     p: { "1": '#fffbe0', O: '#b0600f', Y: '#ffe45c', k: '#4a2a0a', o: '#e8901a', y: '#ffc21f' },
     r: [

@@ -63,33 +63,35 @@ export class UI {
   build() {
     this.root.innerHTML = `
       <div id="hud">
-        <div class="hud-row">
+        <div class="topbar">
           <button class="lvl" data-act="profile"><div class="ring"><b id="lvl">1</b></div></button>
-          <div class="chips">
-            <div class="chip big" id="c-coins">${icon('coin')}<span>0</span></div>
-            <div class="chip" id="c-pop">${icon('pop')}<span>0</span></div>
-            <div class="chip" id="c-happy">${icon('happy')}<span>0%</span></div>
-          </div>
+          <div class="chip big" id="c-coins">${icon('coin')}<span>0</span></div>
+          <div class="chip" id="c-pop">${icon('pop')}<span>0</span></div>
+          <div class="chip" id="c-happy">${icon('happy')}<span>0%</span></div>
           <div class="spacer"></div>
           <button class="chip clock" data-act="speed" id="c-clock">${icon('sun')}<i id="c-season" class="season">${icon('flower')}</i><span>Day 1 · 08:00</span><em id="c-speed">1x</em></button>
-          <button class="ibtn" data-act="settings">${icon('gear')}</button>
+          <button class="menubtn" data-act="menu" id="btn-menu">${icon('menu')}<i class="badge hidden" id="b-menu"></i></button>
         </div>
-        <div class="hud-row res" id="resbar" data-act="inventory"></div>
-        <div id="event" class="banner hidden" data-act="eventinfo"></div>
-        <button id="story" class="hidden" data-act="story"></button>
+        <div class="resrow" id="resbar" data-act="inventory"></div>
+        <div class="inforow"><div id="event" class="banner hidden" data-act="eventinfo"></div><button id="story" class="hidden" data-act="story"></button></div>
       </div>
-      <div id="side">
-        <button class="ibtn" data-act="quests">${icon('quest')}<i class="badge hidden" id="b-quests"></i><small>Quests</small></button>
-        <button class="ibtn" data-act="daily" id="btn-daily">${icon('gift')}<i class="badge hidden" id="b-daily">!</i><small>Rewards</small></button>
-        <button class="ibtn" data-act="map">${icon('map')}<small>Map</small></button>
-        <button class="ibtn" data-act="achievements">${icon('trophy')}<small>Awards</small></button>
-        <button class="ibtn" data-act="citizens">${icon('people')}<small>Villagers</small></button>
+      <div id="side" class="hidden">
+        <button class="mitem" data-act="quests">${icon('quest')}<span>Quests</span><i class="badge hidden" id="b-quests"></i></button>
+        <button class="mitem" data-act="daily" id="btn-daily">${icon('gift')}<span>Daily Rewards</span><i class="badge hidden" id="b-daily">!</i></button>
+        <button class="mitem" data-act="map">${icon('map')}<span>Island Map</span></button>
+        <button class="mitem" data-act="achievements">${icon('trophy')}<span>Awards</span></button>
+        <button class="mitem" data-act="citizens">${icon('people')}<span>Villagers</span></button>
+        <button class="mitem" data-act="journal">${icon('chat')}<span>Journal</span></button>
+        <button class="mitem" data-act="settings">${icon('gear')}<span>Settings</span></button>
       </div>
       <div id="camctl">
-        <button class="ibtn sm" data-act="rotl">${icon('rotl')}</button>
-        <button class="ibtn sm" data-act="rotr">${icon('rotr')}</button>
-        <button class="ibtn sm" data-act="follow" id="btn-follow">${icon('center')}</button>
-        <button class="ibtn sm" data-act="photo">${icon('camera')}</button>
+        <button class="ibtn sm camtoggle" data-act="camctl">${icon('eye')}</button>
+        <div class="camset">
+          <button class="ibtn sm" data-act="rotl">${icon('rotl')}</button>
+          <button class="ibtn sm" data-act="rotr">${icon('rotr')}</button>
+          <button class="ibtn sm" data-act="follow" id="btn-follow">${icon('center')}</button>
+          <button class="ibtn sm" data-act="photo">${icon('camera')}</button>
+        </div>
       </div>
       <div id="toolbar">
         <button class="tbtn" data-act="build">${icon('build')}<span>Build</span></button>
@@ -146,8 +148,13 @@ export class UI {
     const keepSound = ['close', 'start'];
     if (!keepSound.includes(act)) this.sfx('ui');
     buzz('light');
+    // the dropdown menu closes as soon as anything else (or one of its items) is pressed
+    if (act !== 'menu') this.toggleMenu(false);
+    if (act !== 'camctl' && !el.closest('#camctl')) this.toggleCam(false);
     switch (act) {
       case 'start': this.app.begin(); break;
+      case 'menu': this.toggleMenu(); break;
+      case 'camctl': this.toggleCam(); break;
       case 'close': this.closeSheet(); break;
       case 'modal-ok': this.closeModal(el.dataset.next); break;
       case 'settings': this.openSettings(); break;
@@ -274,8 +281,13 @@ export class UI {
     const bq = $('#b-quests');
     bq.classList.toggle('hidden', !cq);
     bq.textContent = cq;
-    $('#b-daily').classList.toggle('hidden', !g.dailyStatus().available);
-    $('#btn-daily').classList.toggle('glow', g.dailyStatus().available);
+    const daily = g.dailyStatus().available;
+    $('#b-daily').classList.toggle('hidden', !daily);
+    // the menu button carries one combined badge for everything inside it
+    const nm = cq + (daily ? 1 : 0);
+    const bm = $('#b-menu');
+    bm.classList.toggle('hidden', !nm);
+    bm.textContent = nm;
     const ev = s.event;
     const eb = $('#event');
     if (ev && ev.island === g.biome) {
@@ -827,6 +839,12 @@ export class UI {
   // ---------------------------------------------------------------- taps in the world
 
   onTap(x, y) {
+    // tapping the island closes the menus first
+    if (!$('#side')?.classList.contains('hidden') || $('#camctl')?.classList.contains('open')) {
+      this.toggleMenu(false);
+      this.toggleCam(false);
+      return;
+    }
     const w = this.world, g = this.game;
     if (this.app.interior.active) return this.app.interior.onTap(x, y);
     if (this.mode === 'photo') {
@@ -1471,6 +1489,21 @@ export class UI {
     this.refreshHUD();
   }
 
+  /** Open / close the dropdown menu under the menu button (force: true / false, or toggle). */
+  toggleMenu(force) {
+    const side = $('#side');
+    if (!side) return;
+    const open = force ?? side.classList.contains('hidden');
+    side.classList.toggle('hidden', !open);
+    $('#btn-menu')?.classList.toggle('on', open);
+  }
+  /** The camera controls fold out of a single button. */
+  toggleCam(force) {
+    const c = $('#camctl');
+    if (!c) return;
+    c.classList.toggle('open', force ?? !c.classList.contains('open'));
+  }
+
   /** A short tip above the toolbar; `target` (a selector) gets a pulsing ring so the tip points at it. */
   showHint(text, kind = 'tip', target = null) {
     const h = $('#hint');
@@ -1481,7 +1514,11 @@ export class UI {
   }
   _coach(target) {
     document.querySelectorAll('.coach').forEach((el) => el.classList.remove('coach'));
-    if (target) document.querySelector(target)?.classList.add('coach');
+    if (!target) return;
+    let el = document.querySelector(target);
+    // a button inside the closed menu: point at the menu button instead
+    if (el?.closest('#side.hidden')) el = $('#btn-menu');
+    el?.classList.add('coach');
   }
   dismissHint() {
     $('#hint').classList.add('hidden');
