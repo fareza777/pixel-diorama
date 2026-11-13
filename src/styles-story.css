@@ -1,11 +1,14 @@
 /* v1.3: splash studio card, main menu, intro film, story pill, chapter cards and the Journal */
-#splash .splash-studio { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 0.2em; animation: studio 1.35s ease-in-out forwards; }
+/* the splash is only the studio card; main.js fades it out before the title is revealed */
+#splash .splash-studio { display: flex; flex-direction: column; align-items: center; gap: 0.2em; animation: studioin 0.6s ease-out backwards; transition: opacity 0.4s, transform 0.4s; }
+#splash.studio-out .splash-studio, #splash.studio-out .splash-bar { opacity: 0; transform: scale(1.03); }
+#splash .splash-bar { position: absolute; bottom: calc(var(--sab0) + 12vh); width: 8em; height: 0.8em; transition: opacity 0.3s; }
+@keyframes studioin { from { opacity: 0; transform: scale(0.94); } }
+/* the title waits (its entrance animations paused) until the splash is gone */
+body.splashing #title, body.splashing #title * { animation-play-state: paused !important; }
 .splash-studio b { font: 900 4.2em/1 var(--font); letter-spacing: 0.04em; color: #fff; padding: 0.05em 0.25em; border: 4px solid #fff; border-radius: 14px; text-shadow: 0 0.06em 0 #c94a3d; box-shadow: 0 0.08em 0 #c94a3d; }
 .splash-studio span { font-weight: 900; letter-spacing: 0.5em; margin-left: 0.5em; color: #e8ecff; }
 .splash-studio small { font-weight: 700; letter-spacing: 0.3em; color: #8f99c4; text-transform: uppercase; font-size: 0.75em; }
-@keyframes studio { 0% { opacity: 0; transform: scale(0.94); } 20%, 75% { opacity: 1; transform: none; } 100% { opacity: 0; transform: scale(1.03); visibility: hidden; } }
-#splash .splash-game { display: flex; flex-direction: column; align-items: center; gap: 1.3em; animation: splashgame 0.6s ease-out 1.3s backwards; }
-@keyframes splashgame { from { opacity: 0; transform: translateY(10px); } }
 
 /* menus opened from the title sit above it */
 body.intro #sheet { z-index: 12; }

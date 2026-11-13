@@ -1,7 +1,8 @@
 // Island generation and tile helpers. Pure data (no three.js objects), so islands serialise directly.
 import { rng, noise2 } from '../engine/kit.js';
 
-export const N = 22; // tiles per side
+export const N = 32; // tiles per side (v1.3: was 22; older saves are grown by upgradeIsland)
+export const LEGACY_N = 22;
 export const STEP = 0.25; // height step
 export const WATER_Y = 0;
 export const HALF = N / 2;
@@ -35,6 +36,8 @@ function blank(biome, seed) {
     hour: 7.5,
     happiness: 60,
     lastSim: 0,
+    seen: new Array(N * N).fill(0), // fog of war: 1 = explored
+    explored: 0,
   };
 }
 
@@ -79,6 +82,7 @@ export function generateIsland(biome, seed = 1) {
   const rand = rng(seed * 7919 + biome.length * 131);
   const n1 = noise2(seed * 3 + 1), n2 = noise2(seed * 5 + 2), n3 = noise2(seed * 11 + 3);
   const C = HALF - 1; // plaza corner
+  const S = HALF / 11; // shapes were designed for an 11-tile radius: scale them to the island size
   const set = (i, j, h, t) => {
     const k = idx(i, j);
     I.h[k] = h;
@@ -87,7 +91,8 @@ export function generateIsland(biome, seed = 1) {
 
   for (let i = 0; i < N; i++)
     for (let j = 0; j < N; j++) {
-      const [x, z] = tileCenter(i, j);
+      const [wx, wz] = tileCenter(i, j);
+      const x = wx / S, z = wz / S;
       const r = Math.hypot(x, z);
       const a = n1(i * 0.18, j * 0.18), b = n2(i * 0.35, j * 0.35), c = n3(i * 0.6, j * 0.6);
       switch (biome) {
@@ -155,8 +160,8 @@ export function generateIsland(biome, seed = 1) {
     const px = 4.6, pz = 4.2;
     for (let i = 0; i < N; i++)
       for (let j = 0; j < N; j++) {
-        const [x, z] = tileCenter(i, j);
-        const d = Math.hypot(x - px, (z - pz) * 1.2);
+        const [wx, wz] = tileCenter(i, j);
+        const d = Math.hypot(wx / S - px, (wz / S - pz) * 1.2);
         if (d < 2.3) set(i, j, d < 1.3 ? -0.75 : -0.5, 'w');
         else if (d < 3.0) set(i, j, 0.25, 's');
       }
@@ -216,12 +221,88 @@ export function generateIsland(biome, seed = 1) {
   const roadT = biome === 'kota' ? 'a' : 'p';
   if (biome !== 'kota') {
     // a small path cross from the plaza
-    pathLine(I, C - 1, C + 2, C - 1, Math.min(N - 2, C + 6), roadT);
-    pathLine(I, C + 2, C, Math.min(N - 2, C + 6), C, roadT);
-    pathLine(I, C, C - 1, C, Math.max(1, C - 5), roadT);
+    pathLine(I, C - 1, C + 2, C - 1, Math.min(N - 2, C + 8), roadT);
+    pathLine(I, C + 2, C, Math.min(N - 2, C + 8), C, roadT);
+    pathLine(I, C, C - 1, C, Math.max(1, C - 7), roadT);
   }
   I.buildings.push({ id: I.nextId++, type: 'balai', i: C, j: C, rot: 0, level: 1, paint: 0, built: 1, progress: 0 });
+  // fog of war: only the land around the town hall is known at the start
+  revealArea(I, C + 1, C + 1, START_SIGHT);
   return I;
+}
+
+// ---------------------------------------------------------------- fog of war
+
+export const START_SIGHT = 5.5;
+
+/** Mark tiles within radius r of (ci, cj) as explored. Returns the keys that were newly revealed. */
+export function revealArea(I, ci, cj, r) {
+  const out = [];
+  const r2 = r * r;
+  for (let i = Math.max(0, Math.floor(ci - r)); i <= Math.min(N - 1, Math.ceil(ci + r)); i++)
+    for (let j = Math.max(0, Math.floor(cj - r)); j <= Math.min(N - 1, Math.ceil(cj + r)); j++) {
+      const di = i + 0.5 - ci, dj = j + 0.5 - cj;
+      if (di * di + dj * dj > r2) continue;
+      const k = idx(i, j);
+      if (!I.seen[k]) {
+        I.seen[k] = 1;
+        out.push(k);
+      }
+    }
+  I.explored = (I.explored || 0) + out.length;
+  return out;
+}
+
+/**
+ * v1.3: grow an island from an older, smaller save (LEGACY_N tiles per side) to N. The old land keeps its
+ * place in the middle (and stays explored); new land from the same seed fills the ring around it, and
+ * where the old edge was water (a shore, a canal) the water carries on outwards.
+ */
+export function upgradeIsland(I) {
+  const old = Math.round(Math.sqrt(I.h.length));
+  if (old === N) {
+    I.seen ||= new Array(N * N).fill(1);
+    return I;
+  }
+  const o = Math.floor((N - old) / 2);
+  const fresh = generateIsland(I.biome, I.seed || 1);
+  const oi = (i, j) => i * old + j;
+  const h = fresh.h.slice(), t = fresh.t.slice(), nodes = {};
+  const seen = new Array(N * N).fill(0);
+  for (let i = 0; i < N; i++)
+    for (let j = 0; j < N; j++) {
+      const k = idx(i, j);
+      const pi = i - o, pj = j - o;
+      if (pi >= 0 && pj >= 0 && pi < old && pj < old) {
+        h[k] = I.h[oi(pi, pj)];
+        t[k] = I.t[oi(pi, pj)];
+        seen[k] = 1;
+        continue;
+      }
+      // the ring: continue the old edge's water outwards, otherwise keep the new land and its nature
+      const ek = oi(Math.min(old - 1, Math.max(0, pi)), Math.min(old - 1, Math.max(0, pj)));
+      if (I.t[ek] === 'w') {
+        h[k] = Math.min(I.h[ek], -0.5);
+        t[k] = 'w';
+      } else if (fresh.nodes[k]) nodes[k] = fresh.nodes[k];
+    }
+  for (const [key, n] of Object.entries(I.nodes || {})) {
+    const pi = Math.floor(+key / old), pj = +key % old;
+    nodes[idx(pi + o, pj + o)] = n;
+  }
+  const move = (p) => p && { ...p, i: p.i + o, j: p.j + o };
+  const up = {
+    ...I, h, t, nodes, seen,
+    explored: seen.reduce((a, v) => a + v, 0),
+    buildings: (I.buildings || []).map(move),
+    plaza: move(I.plaza),
+    chest: move(I.chest) || null,
+    cat: move(I.cat) || null,
+    fires: I.fires || [],
+  };
+  if (!up.chest) delete up.chest;
+  if (!up.cat) delete up.cat;
+  return up;
 }
 
 // ---------------------------------------------------------------- serialisation
@@ -232,6 +313,7 @@ export function packIsland(I) {
     ...I,
     h: I.h.map((v) => String.fromCharCode(48 + Math.round(v / STEP) + H_OFF)).join(''),
     t: I.t.join(''),
+    seen: (I.seen || []).join(''),
     npcs: I.npcs.map((p) => ({ ...p, path: undefined, pos: undefined, vis: undefined, state: undefined })),
   };
 }
@@ -239,6 +321,7 @@ export function unpackIsland(P) {
   const I = { ...P };
   I.h = typeof P.h === 'string' ? [...P.h].map((ch) => (ch.charCodeAt(0) - 48 - H_OFF) * STEP) : P.h;
   I.t = typeof P.t === 'string' ? [...P.t] : P.t;
+  if (typeof P.seen === 'string') I.seen = [...P.seen].map(Number);
   I.nodes = P.nodes || {};
   I.buildings = P.buildings || [];
   I.npcs = P.npcs || [];

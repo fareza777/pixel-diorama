@@ -25,7 +25,8 @@ const escH = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', 
 const evIcon = (name) => `<div style="position:relative;margin:0 auto 0.2em">${icon(name || 'event', 'xl')}</div>`;
 
 const VERSION = '1.3.0';
-const SPLASH_MIN_MS = 2600; // the studio card and logo get their moment
+const SPLASH_MIN_MS = 1700; // how long the studio card shows at least
+const SPLASH_T0 = performance.now(); // when the page (and the splash) came up
 const TITLE_HOUR = 10.5;
 
 class App {
@@ -102,17 +103,21 @@ class App {
     requestAnimationFrame((t) => this.loop(t));
     this.ui.ready(hasSave);
     // hide the static splash (after its studio card and logo had time to show)
-    const wait = Math.max(0, SPLASH_MIN_MS - (performance.now() - (window.__bootT || 0)));
+    // studio card -> fades away on the dark splash -> the splash opens onto the title (never overlapping)
+    const wait = Math.max(0, SPLASH_MIN_MS - (performance.now() - SPLASH_T0));
+    const splash = document.getElementById('splash');
+    setTimeout(() => splash?.classList.add('studio-out'), wait);
     setTimeout(() => {
-      document.getElementById('splash')?.classList.add('out');
-      setTimeout(() => document.getElementById('splash')?.remove(), 700);
+      splash?.classList.add('out');
+      document.body.classList.remove('splashing');
+      setTimeout(() => splash?.remove(), 700);
       let fresh = false;
       try {
         fresh = sessionStorage.getItem('pd-newgame') === '1';
         sessionStorage.removeItem('pd-newgame');
       } catch {}
       if (fresh) this.begin();
-    }, wait);
+    }, wait + 450);
     initAds();
   }
 
@@ -241,6 +246,34 @@ class App {
     g.on('event:cure', ({ p, byMayor, left }) => {
       if (byMayor) this.audio.play('sparkle');
       ui.toast(`${p.name} ${byMayor ? 'feels much better, thank you!' : 'got over the cold.'}${left ? ` ${left} still sick.` : ''}`, { icon: 'heart', ms: 3000 });
+    });
+    g.on('fog:reveal', (keys) => w.onReveal(keys));
+    g.on('discover', ({ got, chest }) => {
+      this.audio.play('sparkle');
+      if (chest) ui.toast('You found an old treasure chest in the new land!', { icon: 'chest', ms: 3000 });
+      else if (got) {
+        ui.popup(w.mayor.pos.clone().add(new THREE.Vector3(0, 0.9, 0)), got);
+        ui.toast('New land explored!', { icon: 'map', ms: 1600 });
+      }
+    });
+    g.on('wild:spawn', ({ kind }) => {
+      this.audio.play('coyote', { pitch: kind === 'boar' ? 0.6 : 1 });
+      if (!this._wildWarned) {
+        this._wildWarned = true;
+        ui.toast(`A ${kind === 'boar' ? 'wild boar' : 'wolf'} is heading for your farms! Tap it to chase it away.`, { icon: 'bug', ms: 4200, kind: 'warn' });
+      }
+    });
+    g.on('wild:raid', ({ kind, take }) => {
+      const now = performance.now();
+      if (now - (this._raidToast || 0) > 8000) {
+        this._raidToast = now;
+        ui.toast(`A ${kind === 'boar' ? 'boar' : 'wolf'} is eating your food! -${take} Food`, { icon: 'food', ms: 2400, kind: 'warn' });
+      }
+    });
+    g.on('wild:chased', ({ got, byMayor, pos }) => {
+      this.audio.play('coin');
+      ui.popup(pos.clone().add(new THREE.Vector3(0, 0.6, 0)), got);
+      if (byMayor) platform.buzz('medium');
     });
     g.on('story:chapter', (e) => ui.showChapter(e));
     g.on('story:finale', (F) => ui.showFinale(F));

@@ -5,13 +5,14 @@ import {
   QUESTS, ACHIEVEMENTS, EVENTS, EVENT_BY_ID, LEGACY_NAMES, xpForLevel, MAX_PLAYER_LEVEL, DAILY_REWARDS, START, PAINTS,
   SEASONS, SEASON_DAYS, WALKABLE_TYPES,
 } from './data.js';
-import { N, idx, inside, generateIsland, packIsland, unpackIsland, WALKABLE, ROADS, STEP } from './island.js';
+import { N, idx, inside, generateIsland, packIsland, unpackIsland, upgradeIsland, WALKABLE, ROADS, STEP } from './island.js';
 import { randomLook } from './people.js';
 import { rng } from '../engine/kit.js';
 import { FURNITURE, WALLPAPERS, FLOORS, homeStats, defaultFurniture, ENTERABLE } from './furniture.js';
 import { SystemsMixin } from './systems.js';
 import { FrontierMixin } from './frontier.js';
 import { StoryMixin } from './story.js';
+import { FogMixin } from './fog.js';
 
 export const SAVE_VERSION = 1;
 export const SECONDS_PER_GAME_HOUR = 30; // a full day takes 12 real minutes at 1x
@@ -74,7 +75,7 @@ export class Game {
       event: null,
       eventCd: 6,
       weather: {},
-      settings: { sound: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true, shake: true, tilt: false, gfx13: true, voice: true },
+      settings: { sound: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true, shake: true, tilt: false, gfx13: true, voice: true, fog: 'clouds' },
       tips: 0,
       tutorial: 0,
       furn: {}, // furniture in storage: id -> count
@@ -129,7 +130,14 @@ export class Game {
       d.event.got ||= {};
     }
     d.eventCd = d.eventCd ?? 0;
-    for (const k of Object.keys(d.islands)) d.islands[k] = unpackIsland(d.islands[k]);
+    for (const k of Object.keys(d.islands)) {
+      const raw = unpackIsland(d.islands[k]);
+      const oldN = Math.round(Math.sqrt(raw.h.length));
+      d.islands[k] = upgradeIsland(raw);
+      // v1.3: islands grew from 22 to 32 tiles, so a running event's props move with the land
+      const o = Math.floor((N - oldN) / 2);
+      if (o && d.event?.island === k) for (const pr of d.event.props || []) Object.assign(pr, { i: pr.i + o, j: pr.j + o });
+    }
     // v1.3: villagers from older saves get the matching global name
     for (const I of Object.values(d.islands)) for (const p of I.npcs || []) {
       const i = LEGACY_NAMES.indexOf(p.name);
@@ -379,6 +387,7 @@ export class Game {
     if (!this.biomeAllows(type)) return { ok: false, reason: "Can't be built on this island" };
     if (def.limit && this.countType(type, I) >= def.limit) return { ok: false, reason: 'Only one per island' };
     const s = def.size;
+    if (!this.footprintSeen(i, j, s, I)) return { ok: false, reason: 'Explore this area first: walk there or build a Scout Tower' };
     let hMax = -99, hMin = 99;
     for (let a = 0; a < s; a++)
       for (let b = 0; b < s; b++) {
@@ -463,6 +472,7 @@ export class Game {
     this.addXp(5 + Math.round((def.cost.coins || 0) / 10));
     this.emit('building:add', rec);
     this.emit('terrain');
+    this.revealForBuilding(rec);
     return { ok: true, rec };
   }
 
@@ -477,6 +487,7 @@ export class Game {
     this.assignHomes(this.I);
     this.assignJobs(this.I);
     this.emit('building:built', rec);
+    if (BUILDINGS[rec.type].scout) this.revealForBuilding(rec, true);
   }
 
   upgrade(rec) {
@@ -1415,7 +1426,7 @@ export class Game {
       const i = Math.round(ci + (Math.random() * 2 - 1) * (r + 0.5)), j = Math.round(cj + (Math.random() * 2 - 1) * (r + 0.5));
       if (!inside(i, j)) continue;
       const k = idx(i, j);
-      if (WALKABLE.has(I.t[k]) && !this.occ[k] && !I.nodes[k] && !this._propAt(ev, i, j)) return { i, j };
+      if (WALKABLE.has(I.t[k]) && !this.occ[k] && !I.nodes[k] && !this._propAt(ev, i, j) && (!I.seen || I.seen[k])) return { i, j };
     }
     return null;
   }
@@ -1475,7 +1486,7 @@ export class Game {
     for (let t = 0; t < 200; t++) {
       const i = 1 + Math.floor(Math.random() * (N - 2)), j = 1 + Math.floor(Math.random() * (N - 2));
       const k = idx(i, j);
-      if (WALKABLE.has(I.t[k]) && !this.occ[k] && !I.nodes[k]) return { i, j };
+      if (WALKABLE.has(I.t[k]) && !this.occ[k] && !I.nodes[k] && (!I.seen || I.seen[k])) return { i, j };
     }
     return null;
   }
@@ -1857,6 +1868,6 @@ export class Game {
   }
 }
 
-Object.assign(Game.prototype, SystemsMixin, FrontierMixin, StoryMixin);
+Object.assign(Game.prototype, SystemsMixin, FrontierMixin, StoryMixin, FogMixin);
 
 export { WALKABLE_BUILDINGS, STEP };

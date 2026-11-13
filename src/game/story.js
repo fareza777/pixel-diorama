@@ -38,9 +38,10 @@ export const CHAPTERS = [
   },
   {
     id: 'ch2', vo: 'ch2', title: 'The First Families',
-    text: 'Smoke from a chimney travels far. The first families are coming home. Make room for them, and keep them happy.',
+    text: 'Smoke from a chimney travels far. The first families are coming home. Make room for them, explore the land beyond the clouds, and keep them happy.',
     goals: [
       { text: 'Welcome 6 villagers', done: (g) => g.I.npcs.length >= 6, progress: (g) => [g.I.npcs.length, 6], act: 'build', target: '[data-act="build"]' },
+      { text: 'Explore 40% of the island', done: (g) => g.exploredShare() >= 0.4, progress: (g) => [Math.round(g.exploredShare() * 100), 40], act: 'build', target: '[data-act="build"]' },
       { text: 'Reach 60% happiness', done: (g) => g.islandHappiness() >= 60, progress: (g) => [Math.round(g.islandHappiness()), 60] },
       { text: 'Finish 3 quests', done: (g) => g.s.quests.done.length >= 3, progress: (g) => [g.s.quests.done.length, 3], act: 'quests', target: '[data-act="quests"]' },
     ],

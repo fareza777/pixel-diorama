@@ -1298,6 +1298,48 @@ function museum(b, c, level) {
   b.light(-0.6, 0.4, 0.9, '#ffe0a0', 1.6);
 }
 
+// ---- v1.3 exploring and guarding
+function scout(b, c) {
+  // a tall wooden lookout on four legs with a ladder, a roofed platform and a pennant
+  b.box(0.7, 0.04, 0.7, '#8a6a4a', 0, 0, 0, {}, 'rough');
+  const H = 1.25;
+  for (const [x, z] of [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]]) b.box(0.06, H, 0.06, WOOD_D, x, 0.04, z, { rx: z * 0.15, rz: -x * 0.15 });
+  for (const y of [0.35, 0.75]) {
+    b.box(0.46, 0.035, 0.035, WOOD, 0, y, 0.2);
+    b.box(0.46, 0.035, 0.035, WOOD, 0, y, -0.2);
+    b.box(0.035, 0.035, 0.46, WOOD, 0.2, y, 0);
+    b.box(0.035, 0.035, 0.46, WOOD, -0.2, y, 0);
+  }
+  for (let k = 0; k < 6; k++) b.box(0.16, 0.025, 0.025, WOOD, 0, 0.12 + k * 0.19, 0.3);
+  b.box(0.58, 0.05, 0.58, WOOD, 0, H, 0);
+  for (const s of [-1, 1]) {
+    b.box(0.58, 0.14, 0.03, WOOD_D, 0, H + 0.05, s * 0.28);
+    b.box(0.03, 0.14, 0.58, WOOD_D, s * 0.28, H + 0.05, 0);
+  }
+  for (const [x, z] of [[-0.26, -0.26], [0.26, -0.26], [-0.26, 0.26], [0.26, 0.26]]) b.box(0.035, 0.32, 0.035, WOOD_D, x, H + 0.05, z);
+  b.cone(0.48, 0.3, c.roof, 0, H + 0.37, 0, { ry: Math.PI / 4 }, 'rough', 4);
+  b.box(0.02, 0.3, 0.02, '#5a5e68', 0, H + 0.6, 0);
+  b.box(0.16, 0.08, 0.01, '#e94f4f', 0.08, H + 0.82, 0);
+  b.glowBox(0.05, 0.07, 0.05, '#ffc36b', 5, 0.18, H + 0.12, 0.18, {}, '#c8a040');
+  b.light(0.18, H + 0.2, 0.18, '#ffc36b', 1.4);
+}
+
+function guard(b, c) {
+  // a small stone watch hut with a wooden fence, a lantern and a signal horn on a post
+  b.box(0.9, 0.04, 0.9, '#8a7a62', 0, 0, 0, {}, 'rough');
+  b.box(0.46, 0.42, 0.42, shade(c.stone, 1.05), -0.1, 0.04, -0.1, {}, 'rough');
+  b.prism(0.5, 0.46, 0.22, c.roof, -0.1, 0.46, -0.1);
+  b.box(0.14, 0.24, 0.02, '#4a3020', -0.1, 0.04, 0.115);
+  b.glowBox(0.1, 0.08, 0.02, '#ffc36b', 4, 0.06, 0.26, 0.115, {}, '#3a3046');
+  for (let k = 0; k < 6; k++) b.box(0.04, 0.2, 0.04, WOOD_D, -0.4 + k * 0.16, 0.04, 0.38);
+  b.box(0.86, 0.03, 0.03, WOOD, 0, 0.18, 0.38);
+  b.box(0.04, 0.6, 0.04, WOOD_D, 0.32, 0.04, -0.3);
+  b.cyl(0.03, 0.07, 0.16, '#d8b060', 0.32, 0.62, -0.3, { rz: -1.2 }, 'smooth', 8);
+  b.cyl(0.03, 0.03, 0.08, '#2c3140', 0.3, 0.32, 0.12, {}, 'smooth', 6);
+  b.glowBox(0.06, 0.07, 0.06, '#ffe08a', 6, 0.3, 0.38, 0.12, {}, '#c8a040');
+  b.light(0.3, 0.45, 0.2, '#ffd08a', 1.6);
+}
+
 // ---- v1.3 hazard defences
 function seawall(b, c) {
   // a curved stone breakwater with a walkway, mooring posts and a small warning light
@@ -1340,7 +1382,7 @@ const BUILDERS = {
   sumur, taman, lampu, pohon: pohonHias, bunga, bangku, airmancur, monumen, lumbung, rumahpohon: rumahPohon, observatorium, obelisk,
   menarajam: menaraJam, pohonkehidupan: pohonKehidupan,
   peternakan, kebun, penggergajian, tungku, kaca, klinik, sekolah, perpustakaan, taman_bermain: tamanBermain, panggung, menara_air: menaraAir,
-  pemadam, roti, lab, pelabuhan, bank, museum, seawall, terracewall, windbreak,
+  pemadam, roti, lab, pelabuhan, bank, museum, seawall, terracewall, windbreak, scout, guard,
 };
 
 /**

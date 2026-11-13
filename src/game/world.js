@@ -10,6 +10,8 @@ import { Crowd, GATHER_ANIMS, randomLook } from './people.js';
 import { Ambient } from './ambient.js';
 import { findPath } from './path.js';
 import { FireFx } from './fire.js';
+import { FogLayer, MAYOR_SIGHT } from './fog.js';
+import { Wildlife } from './wild.js';
 import { footprint, WALKABLE_BUILDINGS, SECONDS_PER_GAME_HOUR } from './game.js';
 
 const BASE = -2.6;
@@ -336,6 +338,10 @@ export class World {
     this.root.add(this.ambient.group);
     this.ambient.attach();
     this.fire = new FireFx(this);
+    this.fog = new FogLayer(this);
+    this.root.add(this.fog.mesh);
+    this.wild = new Wildlife(this);
+    this.root.add(this.wild.group);
 
     const B = BIOMES[biome];
     const maxH = Math.max(...I.h);
@@ -359,6 +365,10 @@ export class World {
     if (!this.scene) return;
     this.fire?.dispose();
     this.fire = null;
+    this.fog?.dispose();
+    this.fog = null;
+    this.wild?.dispose();
+    this.wild = null;
     for (const b of this.buildings.values()) {
       disposeModel(b.group);
       if (b.scaffold) disposeModel(b.scaffold);
@@ -492,6 +502,7 @@ export class World {
     const groups = new Map();
     for (const [key, n] of Object.entries(I.nodes)) {
       if (n.hp === 0) continue;
+      if (I.seen && !I.seen[key]) continue; // hidden under the clouds: not drawn at all
       const g = `${n.k}:${n.v}`;
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(+key);
@@ -688,7 +699,9 @@ export class World {
       this.flowers.material.dispose();
       this.flowers = null;
     }
-    const count = Math.round(1500 * this.quality.grass);
+    // grass only on explored land, as dense as before the islands grew
+    const seenTiles = I.seen ? I.seen.reduce((a, v) => a + v, 0) : N * N;
+    const count = Math.round(1500 * this.quality.grass * Math.min(2.2, seenTiles / 484));
     if (count < 50) return;
     const occ = this.game.occ;
     const rand = K.rng(I.seed + 99);
@@ -698,6 +711,7 @@ export class World {
       const k = idx(i, j);
       const t = I.t[k];
       if (t !== 'g' && t !== 'm') return null;
+      if (I.seen && !I.seen[k]) return null;
       if (occ[k] && !['taman'].includes(this.buildings.get(occ[k])?.rec.type)) return null;
       return [x, I.h[k], z];
     };
@@ -1408,6 +1422,13 @@ export class World {
 
   // ---------------------------------------------------------------- mayor control
 
+  /** Send the Mayor after a wild animal to shoo it away. */
+  mayorChase(a) {
+    const m = this.mayor;
+    m.task = { kind: 'chase', a };
+    m.mode = 'task';
+  }
+
   mayorGoTo(i, j) {
     const m = this.mayor;
     m.task = null;
@@ -1598,6 +1619,10 @@ export class World {
       }
       if (t.kind === 'fire') {
         this.fire?.mayorSpray(m, t, dt);
+        return;
+      }
+      if (t.kind === 'chase') {
+        this.wild?.mayorTask(m, t, dt);
         return;
       }
       if (t.kind === 'chest' || t.kind === 'cat' || t.kind === 'visitor') {
@@ -2882,6 +2907,9 @@ export class World {
     if (this._loopBase?.cicadas) this.audio.setLoop('cicadas', this._loopBase.cicadas * env.daylight * (1 - env.cur.rain));
     if (festival) this.audio.setLoop('fire', 0);
     this.fire?.update(dt);
+    this.fog?.update(dt);
+    this.wild?.update(dt);
+    this._updateSight(dt);
 
     if (this._grassDirty) {
       this._grassAcc = (this._grassAcc || 0) + dt;
@@ -3078,6 +3106,12 @@ export class World {
 
   /** What is under a point on the canvas (CSS pixels). */
   pick(cx, cy) {
+    const wild = this.wild?.pick(cx, cy);
+    if (wild) return wild;
+    return this._fogPick(this._pickRaw(cx, cy));
+  }
+
+  _pickRaw(cx, cy) {
     const c = this.engine.canvas;
     const thr = 26;
     let best = null, bd = thr;
@@ -3127,6 +3161,36 @@ export class World {
       }
     }
     return null;
+  }
+
+  /** The walking Mayor clears the clouds around them (a few times a second). */
+  _updateSight(dt) {
+    this._sightT = (this._sightT || 0) - dt;
+    if (this._sightT > 0 || !this.I.seen || !this.mayor) return;
+    this._sightT = 0.25;
+    const [i, j] = tileAt(this.mayor.pos.x, this.mayor.pos.z);
+    this.game.reveal(i + 0.5, j + 0.5, MAYOR_SIGHT);
+  }
+
+  /** New land was explored: lift its clouds, then (batched) draw its trees and grass. */
+  onReveal(keys) {
+    this.fog?.reveal(keys);
+    clearTimeout(this._revealTimer);
+    this._revealTimer = setTimeout(() => {
+      if (!this.scene) return;
+      this.rebuildNodes();
+      this._grassDirty = true;
+    }, 900);
+  }
+
+  /** Under the clouds every tap is just "walk there" (exploring); nothing else can be picked. */
+  _fogPick(hit) {
+    const I = this.I;
+    if (!hit || !I.seen) return hit;
+    let i = hit.i, j = hit.j;
+    if (hit.type === 'node') [i, j] = [Math.floor(hit.k / N), hit.k % N];
+    if (i === undefined || I.seen[idx(i, j)]) return hit;
+    return { type: 'tile', i, j, point: hit.point, fog: true };
   }
 
   /** Tile under a canvas point (terrain only) - used while placing or painting roads. */

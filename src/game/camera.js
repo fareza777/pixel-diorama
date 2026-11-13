@@ -21,7 +21,7 @@ export class CameraControl {
     this.onPaint = null; // (x, y, phase)
     this.onHover = null;
     this.enabled = true;
-    this.limits = { zoom: [0.45, 2.8], el: [18, 72] };
+    this.limits = { zoom: [0.32, 2.8], el: [18, 72] };
     this._gesture = null;
     const opts = { passive: false };
     canvas.addEventListener('pointerdown', (e) => this._down(e), opts);

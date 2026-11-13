@@ -294,6 +294,15 @@ export const BUILDINGS = {
     name: 'Museum', cat: 'service', size: 2, cost: { coins: 1400, brick: 40, glass: 25, tool: 6 }, unlock: 14,
     desc: 'Treasures from every island. Villagers visit in the evening; earns XP and coins.', jobs: 2, produce: { xp: 2, coins: 2 }, happy: { amount: 12, radius: 6 }, leisure: true,
   },
+  // ---- v1.3: exploring and keeping the wild animals away
+  scout: {
+    name: 'Scout Tower', cat: 'service', size: 1, cost: { coins: 120, wood: 30 }, unlock: 2,
+    desc: 'A tall wooden lookout. When it is finished it clears the clouds for 7 tiles around it.', scout: 7,
+  },
+  guard: {
+    name: 'Guard Post', cat: 'service', size: 1, cost: { coins: 160, wood: 30, stone: 20 }, unlock: 3,
+    desc: 'A watchman with a lantern and a horn chases wolves and boars away within 5 tiles, day and night.', jobs: 1, guard: 5,
+  },
   // ---- v1.3: hazard defences, one per hazard (see the counter field on the events)
   seawall: {
     name: 'Sea Wall', cat: 'service', size: 1, cost: { coins: 350, stone: 60, brick: 20 }, unlock: 4, biomes: ['pantai', 'desa'],
@@ -753,7 +762,7 @@ export const EVENTS = [
     desc: 'Glowing marsh lights drift through a purple mist. Catch them for crystals!',
     flavor: 'Owls hoot, the mist glows purple and little balls of light float between the trees...',
     effect: ['Catch the glowing lights for Crystal and coins', 'Night walks: leisure fun +50%'],
-    tip: 'Tap a wisp and the Mayor will catch it.',
+    tip: 'Tap a glowing light and the Mayor will catch it.',
     fx: { weather: 'fog', fun: 1.5 }, props: { kind: 'wisp', n: 3, perHour: 1, max: 6 },
   },
 
