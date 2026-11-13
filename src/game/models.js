@@ -431,14 +431,13 @@ function ladang(b, c, level, biome) {
       b.add('crop', g, k % 2 ? crop : shade(crop, 0.9), { x: -0.55 + k * 0.19, y: 0.08, z: -0.65 + r * 0.26 });
     }
   }
-  // shed + scarecrow
+  // shed + a bird-scaring pole with a red flag and shiny tins (no figure)
   b.box(0.32, 0.26, 0.3, WOOD, -0.72, 0.05, 0.7);
   b.prism(0.32, 0.3, 0.14, c.roof, -0.72, 0.31, 0.7);
-  b.cyl(0.015, 0.015, 0.42, WOOD_D, 0.75, 0.05, 0.75);
+  b.cyl(0.015, 0.015, 0.5, WOOD_D, 0.75, 0.05, 0.75);
   b.box(0.26, 0.03, 0.03, WOOD_D, 0.75, 0.32, 0.75);
-  b.box(0.1, 0.12, 0.06, '#c94a3d', 0.75, 0.26, 0.75);
-  b.ball(0.05, '#e3c690', 0.75, 0.43, 0.75, {}, 'smooth', 0);
-  b.cone(0.08, 0.06, '#c99a52', 0.75, 0.46, 0.75);
+  b.box(0.14, 0.09, 0.01, '#c94a3d', 0.83, 0.47, 0.75);
+  for (const sx of [-1, 1]) b.cyl(0.02, 0.02, 0.05, '#c8ccd4', 0.75 + sx * 0.11, 0.25, 0.75, {}, 'smooth', 6);
 }
 
 function penebang(b, c, level) {
@@ -709,15 +708,15 @@ function airmancur(b, c, level) {
 }
 
 function monumen(b, c, level) {
+  // a stone pillar crowned with a golden globe and its ring (no figures)
   b.box(0.6, 0.12, 0.6, c.stone, 0, 0, 0, {}, 'rough');
   b.box(0.4, 0.42, 0.4, shade(c.stone, 1.1), 0, 0.12, 0, {}, 'rough');
   b.box(0.46, 0.05, 0.46, c.stone, 0, 0.54, 0, {}, 'rough');
   const gold = '#e2b33c';
-  b.box(0.12, 0.2, 0.08, gold, 0, 0.62, 0, {}, 'smooth');
-  b.box(0.05, 0.2, 0.05, gold, -0.04, 0.42 + 0.17, 0.0, {}, 'smooth');
-  b.ball(0.06, gold, 0, 0.88, 0, {}, 'smooth', 1);
-  b.box(0.04, 0.2, 0.04, gold, 0.1, 0.8, 0, { rz: -0.5 }, 'smooth');
-  b.glowBox(0.03, 0.06, 0.03, '#ffe08a', 8, 0.19, 0.95, 0, {}, '#c8a040');
+  b.cyl(0.05, 0.08, 0.12, gold, 0, 0.59, 0, {}, 'smooth', 8);
+  b.ball(0.13, gold, 0, 0.84, 0, {}, 'smooth', 1);
+  b.cyl(0.18, 0.18, 0.02, shade(gold, 0.85), 0, 0.83, 0, { rx: 0.45, rz: 0.3 }, 'smooth', 16);
+  b.glowBox(0.03, 0.06, 0.03, '#ffe08a', 8, 0, 0.98, 0, {}, '#c8a040');
   b.light(0, 1.0, 0.3, '#ffe08a', 2);
 }
 
@@ -1051,11 +1050,16 @@ function panggung(b, c, level) {
   }
   b.cone(0.74, 0.32, c.roof, 0, 0.8, -0.15, {}, 'rough', 12);
   b.ball(0.05, '#e2b33c', 0, 1.12, -0.15, {}, 'smooth', 0);
-  // instruments: a drum kit and a piano
-  b.cyl(0.08, 0.08, 0.1, '#e94f4f', -0.2, 0.2, -0.32, {}, 'smooth', 10);
-  b.cyl(0.06, 0.06, 0.08, '#efe6d6', -0.05, 0.2, -0.38, {}, 'smooth', 10);
-  b.box(0.3, 0.16, 0.12, '#1f2230', 0.22, 0.2, -0.35);
-  b.box(0.28, 0.01, 0.05, '#f4f1ea', 0.22, 0.36, -0.3);
+  // a low tea table with a board game and cushions
+  b.cyl(0.2, 0.2, 0.04, WOOD_D, 0, 0.26, -0.15, {}, 'solid', 10);
+  b.cyl(0.04, 0.05, 0.08, WOOD_D, 0, 0.18, -0.15, {}, 'solid', 6);
+  b.box(0.16, 0.012, 0.16, '#f4f1ea', 0, 0.3, -0.15, {}, 'smooth');
+  for (let k = 0; k < 4; k++) b.box(0.04, 0.014, 0.04, '#1f2230', -0.04 + (k % 2) * 0.08, 0.305, -0.19 + Math.floor(k / 2) * 0.08, {}, 'smooth');
+  b.ball(0.035, '#f4f1ea', 0.13, 0.32, -0.05, { sy: 0.8 }, 'smooth', 1);
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2 + 0.78;
+    b.box(0.14, 0.04, 0.14, ['#e94f4f', '#86b8e8', '#7fe08a', '#ffd23d'][k], Math.cos(a) * 0.34, 0.2, -0.15 + Math.sin(a) * 0.34, {}, 'rough');
+  }
   // string lights around the roof
   for (let k = 0; k < 10; k++) {
     const a = (k / 10) * Math.PI * 2;
@@ -1294,12 +1298,49 @@ function museum(b, c, level) {
   b.light(-0.6, 0.4, 0.9, '#ffe0a0', 1.6);
 }
 
+// ---- v1.3 hazard defences
+function seawall(b, c) {
+  // a curved stone breakwater with a walkway, mooring posts and a small warning light
+  b.box(0.96, 0.04, 0.96, '#c9b48a', 0, 0, 0, {}, 'rough');
+  for (let k = 0; k < 5; k++) {
+    const x = -0.4 + k * 0.2;
+    b.box(0.2, 0.34 + (k % 2) * 0.03, 0.34, shade(c.stone, 0.9 + (k % 2) * 0.12), x, 0.04, -0.22, {}, 'rough');
+  }
+  b.box(0.96, 0.05, 0.4, shade(c.stone, 1.15), 0, 0.38, -0.22, {}, 'rough');
+  for (let k = 0; k < 6; k++) b.box(0.14, 0.1, 0.14, shade(c.stone, 0.75), -0.4 + k * 0.16, 0.04, 0.14 + (k % 2) * 0.08, { ry: k * 0.7 }, 'rough');
+  for (const x of [-0.36, 0.36]) b.cyl(0.035, 0.035, 0.16, WOOD_D, x, 0.43, -0.08, {}, 'solid', 6);
+  b.cyl(0.03, 0.03, 0.34, '#e9e4da', 0.42, 0.43, -0.34, {}, 'smooth', 6);
+  b.glowBox(0.07, 0.07, 0.07, '#ff6a4a', 6, 0.42, 0.78, -0.34, {}, '#c8402a');
+  b.light(0.42, 0.85, -0.34, '#ff8a6a', 1.2);
+}
+
+function terracewall(b, c) {
+  // three stepped dry-stone terraces with a few shrubs on top
+  for (let k = 0; k < 3; k++) {
+    const z = 0.3 - k * 0.3, h = 0.16 + k * 0.16;
+    for (let n = 0; n < 4; n++) b.box(0.22, h, 0.26, shade(c.stone, 0.85 + ((n + k) % 3) * 0.1), -0.33 + n * 0.22, 0, z, {}, 'rough');
+    b.box(0.9, 0.04, 0.26, '#6eb156', 0, h, z, {}, 'leaf');
+  }
+  for (const [x, z] of [[-0.25, -0.3], [0.2, 0.0], [0.3, -0.32]]) b.ball(0.09, LEAF, x, 0.52 - (z > -0.1 ? 0.16 : 0), z, {}, 'leaf', 0);
+}
+
+function windbreak(b, c) {
+  // a reed fence in front of a row of date palms
+  b.box(0.96, 0.04, 0.96, '#e2c48a', 0, 0, 0, {}, 'rough');
+  for (let k = 0; k < 11; k++) b.box(0.05, 0.42 + (k % 3) * 0.04, 0.04, k % 2 ? '#c8a060' : '#b08850', -0.42 + k * 0.084, 0.04, 0.3, {}, 'rough');
+  b.box(0.92, 0.03, 0.03, WOOD_D, 0, 0.3, 0.33);
+  for (const x of [-0.3, 0.05, 0.36]) {
+    b.cyl(0.04, 0.055, 0.7, '#8a6a46', x, 0.04, -0.15, { rz: x * 0.15 }, 'rough', 6);
+    for (let a = 0; a < 5; a++) b.box(0.32, 0.02, 0.07, '#4f9a4a', x + Math.cos(a * 1.26) * 0.12, 0.74, -0.15 + Math.sin(a * 1.26) * 0.12, { ry: -a * 1.26, rz: -0.35 }, 'leaf');
+  }
+}
+
 const BUILDERS = {
   balai, vila, apartemen, ladang, penebang, tambang, nelayan, bijih, pasir, kristal, kincir, gudang, bengkel, pasar, kedai, toko,
   sumur, taman, lampu, pohon: pohonHias, bunga, bangku, airmancur, monumen, lumbung, rumahpohon: rumahPohon, observatorium, obelisk,
   menarajam: menaraJam, pohonkehidupan: pohonKehidupan,
   peternakan, kebun, penggergajian, tungku, kaca, klinik, sekolah, perpustakaan, taman_bermain: tamanBermain, panggung, menara_air: menaraAir,
-  pemadam, roti, lab, pelabuhan, bank, museum,
+  pemadam, roti, lab, pelabuhan, bank, museum, seawall, terracewall, windbreak,
 };
 
 /**

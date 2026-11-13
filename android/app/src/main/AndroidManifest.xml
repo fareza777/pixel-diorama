@@ -33,7 +33,19 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- AdMob (v1.3). The value is Google's public TEST app id; put the real one in strings.xml for release. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="@string/admob_app_id" />
     </application>
 
-    <!-- Permissions: none. The game is fully offline; Capacitor serves the bundled files locally. -->
+    <!-- The game itself plays offline. INTERNET is used only by AdMob to load ads (the Google Mobile Ads
+         SDK merges INTERNET and ACCESS_NETWORK_STATE in); listed here so the dependency is explicit. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Rate button: lets the app open the Play Store page -->
+    <queries>
+        <package android:name="com.android.vending" />
+    </queries>
 </manifest>

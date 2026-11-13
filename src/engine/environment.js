@@ -257,7 +257,7 @@ export class Environment {
     P.skyTop.copy(k.top).lerp(this._c1, W.clouds * 0.85).multiplyScalar(1 - 0.35 * W.storm);
     P.skyBottom.copy(k.bot).lerp(this._c2, W.clouds * 0.85).multiplyScalar(1 - 0.3 * W.storm);
     P.stars = k.stars * (1 - W.clouds) * (1 - W.fog);
-    P.fog = W.fog * 0.8;
+    P.fog = W.fog * 0.65;
     this._c1.lerpColors(PAL.fogDay, PAL.fogNight, k.night);
     P.fogColor.copy(P.skyBottom).lerp(this._c1, 0.75);
     P.flash = this.flash;
@@ -283,7 +283,7 @@ export class Environment {
     norm(P.splitLo, k.sky, 0.45);
     P.split = 1 - 0.55 * W.clouds - 0.3 * W.fog;
     P.tilt = 1;
-    P.haze = 1 + W.fog * 1.4 + W.rain * 0.4;
+    P.haze = 1 + W.fog * 2.5 + W.rain * 0.6;
 
     // shared material uniforms
     shared.uTime.value = this.time;

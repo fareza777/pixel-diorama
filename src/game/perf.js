@@ -2,9 +2,12 @@
 // carefully back up) to hold 60 fps. Also caps rendering at 60 fps on high-refresh screens.
 
 export const TIERS = {
-  low: { name: 'Low', shadow: 1024, shadowEvery: 2, bloom: 0, mirror: false, lights: 2, grass: 0.35, smoke: false, outline: 0.45, ambient: 0.4, tilt: 0, haze: 0.1, split: 0.15 },
-  medium: { name: 'Medium', shadow: 1024, shadowEvery: 1, bloom: 0.75, mirror: false, lights: 4, grass: 0.7, smoke: true, outline: 0.5, ambient: 0.7, tilt: 0.4, haze: 0.13, split: 0.2 },
-  high: { name: 'High', shadow: 2048, shadowEvery: 1, bloom: 0.9, mirror: true, lights: 6, grass: 1, smoke: true, outline: 0.5, ambient: 1, tilt: 0.55, haze: 0.14, split: 0.22 },
+  // v1.3: crisper outlines, far less aerial haze, a much softer miniature blur (off by default) and cheap
+  // edge smoothing (aa). art: art pixels on the short side of the screen (more = sharper but heavier;
+  // measured on a Snapdragon 680 phone: 540 art pixels ran at 21 fps on Medium, 360 at 32)
+  low: { name: 'Low', shadow: 1024, shadowEvery: 2, bloom: 0, mirror: false, lights: 2, grass: 0.35, smoke: false, outline: 0.55, ambient: 0.4, tilt: 0, haze: 0.03, split: 0.15, aa: 0.8, art: 400 },
+  medium: { name: 'Medium', shadow: 1024, shadowEvery: 1, bloom: 0.6, mirror: false, lights: 4, grass: 0.7, smoke: true, outline: 0.6, ambient: 0.7, tilt: 0.25, haze: 0.04, split: 0.2, aa: 1, art: 400 },
+  high: { name: 'High', shadow: 2048, shadowEvery: 1, bloom: 0.7, mirror: true, lights: 6, grass: 1, smoke: true, outline: 0.6, ambient: 1, tilt: 0.3, haze: 0.05, split: 0.22, aa: 1, art: 540 },
 };
 // Below the low tier the game gives up detail in this order (Perf.extraPixel):
 //   1 = drop the crease highlights (the costliest part of the pixel pass), same resolution

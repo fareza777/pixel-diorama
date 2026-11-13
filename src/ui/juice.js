@@ -1,5 +1,6 @@
 // UI polish (v1.2): cinematic title cards, reward icons that fly into the HUD, a rolling coin
 // counter and photo mode. Mixed into UI (see ui.js).
+import { showBanner, hideBanner } from '../ads.js';
 import { icon, iconURL } from './icons.js';
 import { RES } from '../game/data.js';
 
@@ -107,6 +108,7 @@ export const JuiceMixin = {
     const L = app.engine.look;
     this._photoLook = Object.fromEntries(LOOK_KEYS.map((k) => [k, L[k]]));
     app.photo = { hour: null, orbit: false, filter: 'natural' };
+    hideBanner();
     document.body.classList.add('photo');
     let bar = $('#photobar');
     if (!bar) {
@@ -152,6 +154,7 @@ export const JuiceMixin = {
     Object.assign(app.engine.look, this._photoLook);
     app.engine.applyLook();
     app.photo = null;
+    showBanner();
     this.mode = 'explore';
     document.body.classList.remove('photo', 'photo-clean');
     $('#photobar')?.remove();

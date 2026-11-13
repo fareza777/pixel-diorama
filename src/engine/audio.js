@@ -291,10 +291,9 @@ export class Ambience {
    * each update. endOffline() renders and returns the AudioBuffer, then the live graph comes back.
    */
   beginOffline(seconds, sampleRate = 48000) {
-    const keys = ['ctx', 'master', 'dest', 'white', 'brown', 'pink', 'wind', 'rain', 'rainLow', 'water', 'waterSwell', 'birdBus', 'bugBus', 'loops', 'lofiBus', 'roofBus', 'dripTimer', 'on', '_acc', 'birdTimer', 'cricketTimer', 'hornTimer', '_clock', '_offline'];
+    const keys = ['ctx', 'master', 'dest', 'white', 'brown', 'pink', 'wind', 'rain', 'rainLow', 'water', 'waterSwell', 'birdBus', 'bugBus', 'loops', 'roofBus', 'dripTimer', 'on', '_acc', 'birdTimer', 'cricketTimer', 'hornTimer', '_clock', '_offline'];
     this._live = Object.fromEntries(keys.map((k) => [k, this[k]]));
     this.loops = {};
-    this.lofiBus = null;
     this.roofBus = null;
     this._acc = 0;
     this._offline = true;
@@ -534,7 +533,7 @@ export class Ambience {
     if (v) v(this, this.now() + 0.02 + (o.delay || 0), o);
   }
 
-  /** Looping bed by name, level 0..1: traffic, buzz, fire, vinyl, lofi, howl, cicadas, hum. */
+  /** Looping bed by name, level 0..1: traffic, buzz, fire, vinyl, howl, cicadas, hum. */
   setLoop(name, level) {
     this.loopLevels = this.loopLevels || {};
     this.loopLevels[name] = level;
@@ -623,53 +622,11 @@ export class Ambience {
       gain.connect(this.master);
       o.start();
       L = { gain, filters: [f] };
-    } else if (name === 'lofi') {
-      const gain = this._out(0);
-      L = { gain, filters: [] };
     }
     if (!L) return null;
-    const base = { traffic: 0.35, hum: 0.12, fire: 0.3, vinyl: 0.05, howl: 0.5, cicadas: 0.06, buzz: 0.05, lofi: 1 }[name] ?? 0.3;
+    const base = { traffic: 0.35, hum: 0.12, fire: 0.3, vinyl: 0.05, howl: 0.5, cicadas: 0.06, buzz: 0.05 }[name] ?? 0.3;
     this.loops[name] = { ...L, base, timer: 0, beat: 0 };
     return this.loops[name];
-  }
-
-  _lofiStep(L, level, t) {
-    // 72 bpm: one chord per bar, soft kick on 1 and 3, rim on 2 and 4, quiet hats on eighths
-    const ctx = this.ctx;
-    const beat = 60 / 72;
-    const bar = Math.floor(L.beat / 4) % 4;
-    const b = L.beat % 4;
-    if (!this.lofiBus) {
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 1700;
-      const trem = ctx.createGain();
-      trem.gain.value = 0.85;
-      this._lfo(4.2, 0.12, trem.gain);
-      lp.connect(trem);
-      trem.connect(L.gain);
-      this.lofiBus = lp;
-    }
-    const chords = [[50, 53, 57, 60, 64], [43, 53, 59, 62, 65], [48, 52, 55, 59, 62], [45, 52, 55, 60, 64]];
-    if (b === 0) VOICES.chord(this, t, { notes: chords[bar], dur: beat * 4 - 0.1, gain: 0.05 * level, dest: this.lofiBus });
-    if (b === 0 || b === 2) {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.frequency.setValueAtTime(110, t);
-      o.frequency.exponentialRampToValueAtTime(42, t + 0.18);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.32 * level, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-      o.connect(g);
-      g.connect(L.gain);
-      o.start(t);
-      o.stop(t + 0.4);
-    }
-    if (b === 1 || b === 3) this._burst(t, 0.06, { freq: 1900, q: 2, gain: 0.07 * level, dest: L.gain });
-    this._burst(t, 0.03, { type: 'highpass', freq: 7000, gain: 0.025 * level, dest: L.gain });
-    this._burst(t + beat / 2, 0.03, { type: 'highpass', freq: 7000, gain: 0.018 * level, dest: L.gain });
-    L.beat++;
-    return beat;
   }
 
   _updateLoops(step) {
@@ -678,7 +635,7 @@ export class Ambience {
     for (const [name, level] of Object.entries(this.loopLevels)) {
       const L = level > 0 ? this._ensureLoop(name) : this.loops?.[name];
       if (!L) continue;
-      L.gain.gain.setTargetAtTime(name === 'lofi' ? (level > 0 ? 1 : 0) : level * L.base, t, 0.4);
+      L.gain.gain.setTargetAtTime(level * L.base, t, 0.4);
       if (level <= 0) continue;
       L.timer -= step;
       if (L.timer > 0) continue;
@@ -689,11 +646,6 @@ export class Ambience {
       } else if (name === 'vinyl') {
         this._burst(t, 0.004, { type: 'lowpass', freq: 2200, gain: (0.04 + Math.random() * 0.1) * level });
         L.timer = 0.15 + Math.random() * 0.8;
-      } else if (name === 'lofi') {
-        // schedule on the audio clock so the beat stays tight
-        if (!L.next || L.next < t) L.next = t + 0.08;
-        while (L.next < t + 0.4) L.next += this._lofiStep(L, level, L.next);
-        L.timer = 0.1;
       } else L.timer = 1;
     }
   }

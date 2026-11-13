@@ -113,6 +113,7 @@ uniform float uDepthMid;
 uniform float uSplit;
 uniform vec3 uSplitLo;
 uniform vec3 uSplitHi;
+uniform float uAA;
 
 float h2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 float n2(vec2 p) {
@@ -228,10 +229,28 @@ void main() {
   vec3 c = sc.rgb;
   float d = depthAt(p);
   bool bg = d >= 0.99999;
+  float fogK = 1.0;
   if (bg) {
     // effects (snow, smoke, sparks, fireworks) drawn over empty sky keep their colour
     c = sky(uv, p) * (1.0 - clamp(sc.a, 0.0, 1.0)) + sc.rgb;
   } else {
+    // cheap edge smoothing (FXAA-like): where the colour jumps, blend a little with the two
+    // neighbours along the edge so slanted lips and roofs lose their ragged stair steps
+    if (uAA > 0.0) {
+      vec3 cE = texelFetch(tColor, min(p + ivec2(1, 0), ivec2(uRes) - 1), 0).rgb;
+      vec3 cW = texelFetch(tColor, max(p - ivec2(1, 0), ivec2(0)), 0).rgb;
+      vec3 cN = texelFetch(tColor, min(p + ivec2(0, 1), ivec2(uRes) - 1), 0).rgb;
+      vec3 cS = texelFetch(tColor, max(p - ivec2(0, 1), ivec2(0)), 0).rgb;
+      vec3 Lw = vec3(0.299, 0.587, 0.114);
+      float lC = dot(c, Lw), lE = dot(cE, Lw), lW = dot(cW, Lw), lN = dot(cN, Lw), lS = dot(cS, Lw);
+      float range = max(max(max(lE, lW), max(lN, lS)), lC) - min(min(min(lE, lW), min(lN, lS)), lC);
+      if (range > 0.08 + 0.12 * lC) {
+        // a mostly horizontal edge blends with the pixels left and right, and vice versa
+        bool horiz = abs(lN + lS - 2.0 * lC) > abs(lE + lW - 2.0 * lC);
+        vec3 along = horiz ? (cE + cW) * 0.5 : (cN + cS) * 0.5;
+        c = mix(c, along, uAA * 0.5);
+      }
+    }
     vec4 nd = vec4(depthAt(p + ivec2(1, 0)), depthAt(p - ivec2(1, 0)), depthAt(p + ivec2(0, 1)), depthAt(p - ivec2(0, 1)));
     float de = uOutline > 0.0 ? depthEdge(nd, d) : 0.0;
     if (de > 0.0) {
@@ -240,11 +259,9 @@ void main() {
       vec4 n = normalAt(p);
       if (n.a > 0.5) c *= 1.0 + uHighlight * normalEdge(p, nd, d, n.xyz);
     }
-    // aerial perspective: things farther back fade a little into the air
-    if (uHaze > 0.0) {
-      float dz = (d - uDepthMid) * uDepthRange;
-      c = mix(c, uHazeColor, uHaze * smoothstep(-3.0, 16.0, dz));
-    }
+    // aerial perspective: only the far background fades a little into the air
+    fogK = smoothstep(-2.0, 22.0, (d - uDepthMid) * uDepthRange);
+    if (uHaze > 0.0) c = mix(c, uHazeColor, uHaze * fogK * fogK);
     // miniature focus: the top and bottom of the view drift softly out of focus
     if (uTilt > 0.0) {
       float tw = smoothstep(uTiltBand, uTiltBand + 0.32, abs(uv.y - uTiltFocus)) * uTilt;
@@ -255,7 +272,8 @@ void main() {
     }
   }
   c += uBloom * (texture(tBloomA, uv).rgb + texture(tBloomB, uv).rgb * 0.85);
-  c = mix(c, uFogColor, uFog * (bg ? 0.85 : (0.16 + 0.62 * uv.y)));
+  // weather fog follows depth (not screen height), so the town in front stays clear and crisp
+  c = mix(c, uFogColor, uFog * (bg ? 0.85 : 0.08 + 0.55 * fogK));
   c += uFlash * (bg ? vec3(0.9, 0.95, 1.1) : vec3(0.35, 0.38, 0.45));
   c = 1.0 - exp(-max(c, 0.0) * uExposure);
   c = toSRGB(c) * uTint;

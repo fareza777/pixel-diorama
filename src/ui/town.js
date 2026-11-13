@@ -31,9 +31,10 @@ export const TownMixin = {
         ['orders', 'order', 'Orders', nOrd ? `<i class="tbadge">${nOrd}</i>` : ''],
         ['missions', 'mission', 'Missions', nMis ? `<i class="tbadge">${nMis}</i>` : ''],
         ['rating', 'star', 'Rating', ''],
+        ['projects', 'build', 'Projects', ''],
       ].map(([id, ic, name, badge]) => `<button class="tab ${id === this._townTab ? 'on' : ''}" data-act="town-tab" data-arg="${id}">${icon(ic)} ${name}${badge}</button>`).join('');
-      const body = { research: () => this._researchHTML(), orders: () => this._ordersHTML(), missions: () => this._missionsHTML(), rating: () => this._ratingHTML() }[this._townTab]();
-      return `<div class="tabs">${tabs}</div><div class="tpane" data-pane="${this._townTab}">${body}</div>`;
+      const body = { research: () => this._researchHTML(), orders: () => this._ordersHTML(), missions: () => this._missionsHTML(), rating: () => this._ratingHTML(), projects: () => this._projectsHTML() }[this._townTab]();
+      return `<div class="tabs ttabs">${tabs}</div><div class="tpane" data-pane="${this._townTab}">${body}</div>`;
     };
     this.openSheet(`${icon('town')} Town`, render(), {
       kind: 'town',
@@ -72,8 +73,14 @@ export const TownMixin = {
       const left = g.researchLeft();
       const pct = Math.min(100, Math.round(((Date.now() - R.cur.start) / Math.max(1, R.cur.end - R.cur.start)) * 100));
       head = `<div class="rnow">${icon('research', 'lg')}<div class="grow"><b>Researching: ${esc(t.name)}</b><div class="goal"><div class="bar sci"><i style="width:${pct}%"></i></div><small>${clock(left)}</small></div></div>
-        <button class="btn buy sm" data-act="tech-rush">Finish ${icon('crystal')}${g.rushCost()}</button></div>`;
+        <div class="ocol"><button class="btn buy sm" data-act="tech-rush">Finish ${icon('crystal')}${g.rushCost()}</button>${R.cur.ad ? '' : `<button class="btn sm" data-act="tech-ad">${icon('speed')} Ad: -50%</button>`}</div></div>`;
     } else head = `<p class="muted">${icon('info')} Pick a project. Research keeps going while the game is closed. Research Labs make it faster (now ${Math.round(g.researchSpeed() * 100)}% speed).</p>`;
+    // phones show one branch at a time (picked with the chips); wide screens show every column
+    const curBr = TECH_BRANCHES.some((br) => br.id === this._techBr) ? this._techBr : TECH_BRANCHES[0].id;
+    const brTabs = TECH_BRANCHES.map((br) => {
+      const done = TECHS.filter((t) => t.br === br.id && R.done.includes(t.id)).length;
+      return `<button class="tab ${br.id === curBr ? 'on' : ''}" style="--c:${br.color}" data-act="tech-br" data-arg="${br.id}">${icon(br.icon)} ${esc(br.name)} <small>${done}/5</small></button>`;
+    }).join('');
     const cols = TECH_BRANCHES.map((br) => {
       const cards = TECHS.filter((t) => t.br === br.id).map((t) => {
         const st = g.techStatus(t.id);
@@ -86,9 +93,9 @@ export const TownMixin = {
         return `<div class="tech ${st.state}" style="--c:${br.color}"><i class="tier">${'I II III IV V'.split(' ')[t.tier - 1]}</i><b>${esc(t.name)}</b><p>${esc(t.desc)}</p>${foot}</div>`;
       }).join('<i class="tlink"></i>');
       const done = TECHS.filter((t) => t.br === br.id && R.done.includes(t.id)).length;
-      return `<div class="tcol"><h3 style="color:${br.color}">${icon(br.icon)} ${esc(br.name)} <small>${done}/5</small></h3>${cards}</div>`;
+      return `<div class="tcol ${br.id === curBr ? 'on' : ''}"><h3 style="color:${br.color}">${icon(br.icon)} ${esc(br.name)} <small>${done}/5</small></h3>${cards}</div>`;
     }).join('');
-    return `${head}<div class="ttree">${cols}</div><p class="muted center">${R.done.length}/${TECHS.length} projects finished</p>`;
+    return `${head}<div class="tabs brtabs">${brTabs}</div><div class="ttree">${cols}</div><p class="muted center">${R.done.length}/${TECHS.length} projects finished</p>`;
   },
 
   // ---------------- orders
@@ -109,7 +116,7 @@ export const TownMixin = {
         <div class="ocol"><button class="btn primary sm" data-act="order-deliver" data-arg="${i}" ${ok ? '' : 'disabled'}>${icon('check')} Deliver</button><button class="btn sm" data-act="order-skip" data-arg="${i}">${icon('cross')} Skip</button></div></div>`;
     }).join('');
     const harbor = g.hasHarbor() ? `<p class="muted">${icon('fish')} Your Harbor adds a slot and +25% to every order.</p>` : `<p class="muted">${icon('info')} Build a Harbor (level 9) for an extra slot and +25% rewards.</p>`;
-    return `${cards}${harbor}<p class="muted center">${fmtN(g.s.stats.orders)} orders delivered</p>`;
+    return `${this._shipHTML()}${cards}${harbor}<p class="muted center">${fmtN(g.s.stats.orders)} orders delivered</p>`;
   },
 
   // ---------------- missions
@@ -152,6 +159,7 @@ export const TownMixin = {
     switch (act) {
       case 'town': this.openTown(); return true;
       case 'town-tab': this.openTown(arg); return true;
+      case 'tech-br': this._techBr = arg; this.openTown('research'); return true;
       case 'tech-start': {
         const r = g.startResearch(arg);
         if (!r.ok) {
@@ -163,6 +171,13 @@ export const TownMixin = {
           buzz('medium');
           this.toast(`Research started: ${TECH_BY_ID[arg].name}`, { icon: 'research' });
         }
+        return true;
+      }
+      case 'tech-ad': {
+        this.app.rewardedAd().then((ok) => {
+          if (ok && g.adSpeedResearch().ok) this.toast('Research time cut in half!', { icon: 'research' });
+          this.openTown('research');
+        });
         return true;
       }
       case 'tech-rush': {

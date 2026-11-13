@@ -35,7 +35,7 @@ const WORK_ANIM = {
   tungku: { anim: 'dig', alt: 'hammer' }, kaca: { anim: 'work', alt: 'hammer' }, kristal: { anim: 'work', alt: 'point' },
   pasar: { anim: 'vend', alt: 'talk' }, toko: { anim: 'vend', alt: 'sweep' }, kedai: { anim: 'cook', alt: 'vend' },
   sekolah: { anim: 'talk', alt: 'point' }, perpustakaan: { anim: 'sweep', alt: 'point' }, klinik: { anim: 'talk', alt: 'work' },
-  panggung: { anim: 'dance', alt: 'clap' }, gudang: { anim: 'work', alt: 'sweep' }, kincir: { anim: 'work' },
+  panggung: { anim: 'talk', alt: 'clap' }, gudang: { anim: 'work', alt: 'sweep' }, kincir: { anim: 'work' },
   pemadam: { anim: 'sweep', alt: 'work' }, roti: { anim: 'cook', alt: 'vend' }, lab: { anim: 'work', alt: 'point' },
   pelabuhan: { anim: 'hammer', alt: 'point' }, bank: { anim: 'vend', alt: 'talk' }, museum: { anim: 'sweep', alt: 'talk' },
 };
@@ -99,14 +99,16 @@ const _eclTop = new THREE.Color('#05060f'), _eclBot = new THREE.Color('#2a2040')
 
 // ---------------------------------------------------------------- terrain colours
 
+// g: base grass shades; dry / lush: large meadow patches for variety; worn: trodden grass beside paths
 const GROUND = {
-  desa: { g: ['#6eb156', '#7fc264', '#5f9f4b'], soil: ['#8e6444', '#7f593c'], stone: ['#70737e', '#62646f'], lip: '#5b9547' },
-  hutan: { g: ['#4f9a4a', '#5fa852', '#468a42'], soil: ['#7a5236', '#6a4630'], stone: ['#626470', '#565862'], lip: '#3f7a3c' },
-  pantai: { g: ['#7fc25a', '#8bcd62', '#72b452'], soil: ['#c9a874', '#b8935e'], stone: ['#8d8a84', '#7a7770'], lip: '#6aa84e' },
-  gunung: { g: ['#6a9a5a', '#5f8f52', '#76a462'], soil: ['#6e5a4e', '#5e4c42'], stone: ['#6a7488', '#5a6478'], lip: '#cfd8e6' },
-  gurun: { g: ['#8fbf5a', '#9cc864', '#82b152'], soil: ['#d8a35c', '#c8873f'], stone: ['#b8703a', '#a8602f'], lip: '#e2b56e' },
-  kota: { g: ['#6fae55', '#7aba5e', '#64a04e'], soil: ['#8d919c', '#7e828c'], stone: ['#6a6e78', '#5e626c'], lip: '#9a9ea8' },
-  fantasi: { g: ['#9a7ad8', '#a98ae0', '#8a6ac8'], soil: ['#6a5aa0', '#5a4a90'], stone: ['#4a3a80', '#3e3070'], lip: '#b49af0' },
+  desa: { g: ['#6eb156', '#7fc264', '#5f9f4b'], dry: ['#9cb85a', '#a8c062'], lush: ['#579e4a', '#4f9444'], worn: '#9a9a5e', soil: ['#8e6444', '#7f593c'], stone: ['#70737e', '#62646f'], lip: '#5b9547' },
+  hutan: { g: ['#4f9a4a', '#5fa852', '#468a42'], dry: ['#7a9a48', '#86a450'], lush: ['#3e8640', '#377a3a'], worn: '#7a8a4e', soil: ['#7a5236', '#6a4630'], stone: ['#626470', '#565862'], lip: '#3f7a3c' },
+  pantai: { g: ['#7fc25a', '#8bcd62', '#72b452'], dry: ['#b4c878', '#c2d084'], lush: ['#64aa4e', '#5ca048'], worn: '#c2b880', soil: ['#c9a874', '#b8935e'], stone: ['#8d8a84', '#7a7770'], lip: '#6aa84e' },
+  gunung: { g: ['#6a9a5a', '#5f8f52', '#76a462'], dry: ['#8a9a62', '#94a26a'], lush: ['#56884e', '#4e7e48'], worn: '#8a8a6a', soil: ['#6e5a4e', '#5e4c42'], stone: ['#6a7488', '#5a6478'], lip: '#cfd8e6' },
+  gurun: { g: ['#8fbf5a', '#9cc864', '#82b152'], dry: ['#bcc070', '#c8c47a'], lush: ['#78ac4e', '#70a248'], worn: '#cdb27a', soil: ['#d8a35c', '#c8873f'], stone: ['#b8703a', '#a8602f'], lip: '#e2b56e' },
+  kota: { g: ['#6fae55', '#7aba5e', '#64a04e'], dry: ['#94b25e', '#9eba66'], lush: ['#5a9a4a', '#539044'], worn: '#9a9c80', soil: ['#8d919c', '#7e828c'], stone: ['#6a6e78', '#5e626c'], lip: '#9a9ea8' },
+  // v1.3: calmer purples so the buildings stand out against the ground
+  fantasi: { g: ['#8a78b4', '#9686c0', '#7e6ca8'], dry: ['#a294c4', '#ac9ecc'], lush: ['#6f6aa8', '#66629e'], worn: '#a49ab8', soil: ['#5e5290', '#524682'], stone: ['#443a72', '#3a3266'], lip: '#a596d0' },
 };
 const TYPE_COL = {
   s: ['#e5cf99', '#ead6a4', '#dcc48e'], r: ['#8d909b', '#9a9da8', '#80838e'], n: ['#e9eef6', '#f2f5fa', '#dfe6f0'],
@@ -120,7 +122,7 @@ const WATER_COL = {
 };
 const GRASS_COL = {
   desa: ['#78bb5b', '#68a94f', '#8bc865', '#5c9a47'], hutan: ['#5fa852', '#4f9a4a', '#6ab65a'], pantai: ['#8bcd62', '#7fc25a'],
-  gunung: ['#7aa86a', '#6a9a5a'], gurun: ['#9cc864', '#8fbf5a'], kota: ['#7aba5e', '#6fae55'], fantasi: ['#b49af0', '#9a7ad8', '#c9a0ff', '#7df9ff'],
+  gunung: ['#7aa86a', '#6a9a5a'], gurun: ['#9cc864', '#8fbf5a'], kota: ['#7aba5e', '#6fae55'], fantasi: ['#a492d0', '#8f7cc0', '#b6a0dc', '#7df9ff'],
 };
 
 // ---------------------------------------------------------------- small particle bursts
@@ -319,8 +321,8 @@ export class World {
     this.engine.mirror = this.quality.mirror && this.hasWater ? { y: 0 } : null;
     this.engine.prepareScene(this.scene);
     this.audio.scene = B.audio || {};
-    this.audio.loopLevels = { ...(this.audio.loopLevels?.lofi ? { lofi: this.audio.loopLevels.lofi } : {}) };
-    if (this.audio.loops) for (const [name, L] of Object.entries(this.audio.loops)) if (name !== 'lofi') L.gain.gain.value = 0;
+    this.audio.loopLevels = {};
+    if (this.audio.loops) for (const L of Object.values(this.audio.loops)) L.gain.gain.value = 0;
     for (const [name, lvl] of Object.entries(B.loops || {})) this.audio.setLoop(name, lvl);
     this._loopBase = { ...(B.loops || {}) };
   }
@@ -409,6 +411,18 @@ export class World {
         if (t === 'p') {
           const pebble = hash(Math.floor((x + HALF) * 2) * 97 + Math.floor((z + HALF) * 2), 3);
           return c.set(list[Math.floor(pebble * list.length)]);
+        }
+        if (list === G.g) {
+          // trodden grass right beside paths and roads
+          const e = 0.32;
+          for (const [dx, dz] of [[e, 0], [-e, 0], [0, e], [0, -e]]) {
+            const n = typeAt(x + dx, z + dz);
+            if (n === 'p' || n === 'v') return c.set(G.worn);
+          }
+          // broad meadow patches: drier on the rises, lusher in the hollows
+          const m = noise(x * 0.42 + 17, z * 0.42 - 9);
+          if (m > 0.68) list = G.dry;
+          else if (m < 0.3 || h < 0.12) list = G.lush;
         }
         const k = v > 0.62 ? 1 : v < 0.38 ? 2 : 0;
         return c.set(list[Math.min(k, list.length - 1)]);
@@ -952,7 +966,8 @@ export class World {
     for (const l of this.lights) this.root.remove(l);
     this.lights = [];
     for (let k = 0; k < this.quality.lights; k++) {
-      const l = new THREE.PointLight('#ffbe6b', 0, 4.2, 2);
+      // a wider, softer pool: no white-hot spot right under a lamp, more warm light on the streets
+      const l = new THREE.PointLight('#ffbe6b', 0, 5.4, 2);
       l.userData.power = 0;
       l.userData.phase = Math.random() * 10;
       this.root.add(l);
@@ -980,7 +995,7 @@ export class World {
       }
       l.position.copy(c.wp);
       l.color.set(c.L.color);
-      l.userData.power = c.L.power;
+      l.userData.power = Math.min(2.2, c.L.power) * 0.8;
     });
   }
 
@@ -1242,7 +1257,7 @@ export class World {
         break;
       case 'festival':
         rt.mode = want.pose === 'wave' ? 'cheer' : 'dance';
-        rt.festPose = want.pose || 'dance';
+        rt.festPose = want.pose || 'clap';
         break;
       default:
         rt.mode = 'idle';
@@ -2490,12 +2505,6 @@ export class World {
   _evPeriodic(dt, F, ev) {
     const vis = F.vis, B = this.bursts, v = F.v, env = this.env, A = this.audio;
     if (vis.sfx && this._evTick('sfx', dt, vis.sfx[1])) A.play(vis.sfx[0], vis.sfx[2] || EV_NONE);
-    if (vis.chord && this._evTick('chord', dt, vis.chord)) A.play('chord', { notes: this._evPick(CHORDS), dur: 3.5, gain: 0.03 });
-    if (vis.music && F.host && this._evTick('music', dt, vis.music)) {
-      const n = this._evPick(PENTA);
-      A.play('chord', { notes: [n, n + (Math.random() < 0.5 ? 4 : 7)], dur: 1.5, gain: 0.04 });
-      B.emit(v.copy(F.host.pos).setY(F.host.pos.y + 0.75), { n: 2, color: this._evPick(CONFETTI), speed: 0.25, up: 0.5, life: 1.4, gravity: -0.25, glow: 2 });
-    }
     if (vis.confetti && this._evTick('confetti', dt, vis.confetti)) this._evConfetti(vis.confettiAt === 'homes' ? this._evPick(F.homes) : F.plaza, vis.confettiAt === 'homes' ? 1.2 : 0.8);
     if (vis.coins && this._evTick('coins', dt, vis.coins)) {
       const a = this._evPick(F.markets);
@@ -2741,7 +2750,7 @@ export class World {
           if (rt.p.need.food < 20) this.emote(rt, 'food');
           else if (!rt.p.home) this.emote(rt, 'home');
           else if (rt.p.mood < 30) this.emote(rt, 'sad');
-          else if (rt.mode === 'dance') this.emote(rt, 'music', 2);
+          else if (rt.mode === 'dance') this.emote(rt, 'heart', 2);
           else if (rt.mode === 'leisure' && rt.p.mood > 70) this.emote(rt, 'heart', 2);
         }
       }
@@ -2877,16 +2886,16 @@ export class World {
       // a quick look up from the work now and then
       if (!A && Math.random() < dt * 0.05) rt.fid = { a: 'lookAround', until: T + 2.5 };
     } else if (rt.mode === 'dance' || rt.mode === 'cheer') {
-      const base = rt.mode === 'cheer' ? 'wave' : rt.festPose || 'dance';
+      const base = rt.mode === 'cheer' ? 'wave' : rt.festPose || 'clap';
       const k = Math.floor(T / 4.5 + hash(rt.p.id, 2) * 7) % 5;
-      anim = [base, base, 'cheer', 'clap', base === 'dance' ? 'dance' : 'cheer'][k];
+      anim = [base, base, 'cheer', 'clap', 'wave'][k];
     } else if (rt.mode === 'leisure' || rt.mode === 'idle') {
       if (rt.chat > T) {
         // one talks, the other laughs, then they swap
         anim = Math.floor(T * 0.6 + hash(rt.p.id, 3) * 3) % 3 === 0 ? 'laugh' : 'talk';
       } else {
         const spot = rt.mode === 'leisure' && rt.spot ? this.buildings.get(rt.spot)?.rec.type : null;
-        if (spot === 'panggung') anim = Math.floor(T / 5 + hash(rt.p.id, 4) * 4) % 3 ? 'dance' : 'clap';
+        if (spot === 'panggung') anim = Math.floor(T / 5 + hash(rt.p.id, 4) * 4) % 3 ? 'talk' : 'clap';
         else if (spot === 'taman_bermain') anim = Math.floor(T / 4 + hash(rt.p.id, 4) * 4) % 3 ? 'cheer' : 'laugh';
         else {
           rt.fidT -= dt;
@@ -3143,8 +3152,6 @@ const SAND_COL = ['#d8b070', '#c89858', '#e8c890'].map(rgb);
 const CONFETTI = ['#ff5d9e', '#ffd23d', '#7fe08a', '#86b8e8', '#c9a0ff', '#ff8a4a'];
 const FLOWER_COL = ['#ff8ad8', '#ffd23d', '#ffffff', '#b58cff', '#ff6a6a'];
 const PROP_COLOR = { star: '#fff1a0', gold: '#ffd23d', dog: '#ffffff', kid: '#ff8ad8', chest: '#ffe08a', dig: '#ffd23d', bees: '#ffd23d', wisp: '#c9a0ff' };
-const PENTA = [60, 62, 64, 67, 69, 72, 74, 76];
-const CHORDS = [[60, 64, 67, 72], [57, 60, 64, 69], [55, 59, 62, 67], [53, 57, 60, 65]];
 const HOST_LOOK = {
   bard: { skin: '#f1c7a3', coat: '#3d8a5a', pants: '#5a3a22', hair: '#c9853a', hat: '#b8483a', umbrella: '#3d8a5a', long: false },
   royal: { skin: '#f1d0b0', coat: '#a8243a', pants: '#f2e2bf', hair: '#e8d4a0', hat: '#ffd23d', umbrella: '#a8243a', long: true },
@@ -3152,7 +3159,7 @@ const HOST_LOOK = {
 
 // Per event: motes [[type, count]], sky billboards (moon, rainbow), aurora, env tint [r,g,b]
 // (tintNight: only at night), fog colour, ambience loops, a periodic one-shot sfx [name, secs, opts]
-// and periodic effects (seconds between them): chord, music, confetti, coins, party, fireworks,
+// and periodic effects (seconds between them): confetti, coins, party, fireworks,
 // splash, chimney, construction, flowers, sneeze.
 const EV_VIS = {
   caravan: { coins: 1.2 },
@@ -3162,8 +3169,8 @@ const EV_VIS = {
   pest: { motes: [[M_BEE, 24]], beeFarms: true, loops: { buzz: 0.25 } },
   meteor: { motes: [[M_STREAK, 18]] },
   nightmarket: { motes: [[M_HANG, 28]], coins: 1.5, sfx: ['bell', 10, { pitch: 0.8 }] },
-  lantern: { motes: [[M_LANTERN, 44]], sfx: ['bell', 8, { pitch: 0.6 }], chord: 11 },
-  bard: { music: 2.2 },
+  lantern: { motes: [[M_HANG, 40], [M_FLY, 16]], sfx: ['bell', 8, { pitch: 0.6 }] },
+  bard: { confetti: 4 },
   birthday: { party: 1.8 },
   taxholiday: { confetti: 1.6, confettiAt: 'homes' },
   royal: { fireworks: 2.8, sfx: ['horn', 16, { pitch: 1.3, dur: 1.2 }] },
@@ -3184,15 +3191,17 @@ const EV_VIS = {
   harvestmoon: { moon: true, motes: [[M_EMBER, 28]], tint: [1.06, 0.96, 0.86], tintNight: true },
   fireflies: { motes: [[M_FLY, 90]], sfx: ['owl', 15] },
   butterflies: { motes: [[M_BFLY, 50]] },
-  aurora: { aurora: true, motes: [[M_FLY, 24]], loops: { hum: 0.3 }, chord: 14 },
+  aurora: { aurora: true, motes: [[M_FLY, 24]], loops: { hum: 0.3 } },
   bloom: { motes: [[M_PETAL, 60]], flowers: 0.35 },
   // v1.1
   springfair: { motes: [[M_PETAL, 40], [M_HANG, 14]], confetti: 1.8, flowers: 0.6, sfx: ['bell', 11, { pitch: 1.3 }] },
   harvestfest: { motes: [[M_EMBER, 22], [M_HANG, 16]], flowers: 0.5, flowersAt: 'farms', flowerCol: ['#e8823a', '#ffd23d', '#e94f4f', '#c86a2a'], confetti: 2.6, tint: [1.05, 0.98, 0.9] },
   snowfest: { motes: [[M_HANG, 20]], confetti: 2.2, chimney: 0.9, loops: { fire: 0.12 } },
   drought: { motes: [[M_HEAT, 40]], tint: [1.08, 1.0, 0.86], loops: { cicadas: 0.6 } },
-  eclipse: { motes: [[M_FLY, 30]], loops: { hum: 0.35 }, chord: 9 },
+  eclipse: { motes: [[M_FLY, 30]], loops: { hum: 0.35 } },
   migration: { sfx: ['gull', 5] },
   earthquake: { loops: { howl: 0.15 } },
+  flood: { splash: 0.6, sfx: ['gull', 9] },
+  landslide: { loops: { howl: 0.2 }, sfx: ['rumble', 7] },
   tourists: { coins: 1.1, confetti: 4, confettiAt: 'homes' },
 };

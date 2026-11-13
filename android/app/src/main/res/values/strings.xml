@@ -4,4 +4,6 @@
     <string name="title_activity_main">Pixel Diorama</string>
     <string name="package_name">com.f7developer.pixeldiorama</string>
     <string name="custom_url_scheme">com.f7developer.pixeldiorama</string>
+    <!-- Google's public AdMob TEST application id. Replace with your own before publishing. -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

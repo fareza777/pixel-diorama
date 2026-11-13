@@ -537,27 +537,30 @@ export const FURNITURE = {
     },
     light: { y: 0.42, z: 0.15, color: '#6fd8ff', power: 0.5 },
   },
+  // (save ids 'piano' and 'gramophone' kept for old saves; the items are now a cabinet and a tea cart)
   piano: {
-    name: 'Upright Piano', cat: 'deco', icon: 'piano', size: [2, 1], cost: { coins: 520, plank: 8, ore: 3 }, comfort: 5, fun: 2, unlock: 7,
+    name: 'Display Cabinet', cat: 'deco', icon: 'shelf', size: [2, 1], cost: { coins: 520, plank: 8, glass: 3 }, comfort: 5, fun: 2, unlock: 7,
     build(b) {
-      b.box(0.84, 0.66, 0.24, '#2a1e1a', 0, 0, -0.12, {}, 'smooth');
-      b.box(0.86, 0.04, 0.26, '#3a2a24', 0, 0.66, -0.12, {}, 'smooth');
-      b.box(0.8, 0.04, 0.14, '#f4f1ea', 0, 0.34, 0.06, {}, 'smooth');
-      for (let k = 0; k < 11; k++) b.box(0.025, 0.02, 0.08, '#1b1d2b', -0.33 + k * 0.066, 0.38, 0.03, {}, 'smooth');
-      b.box(0.82, 0.05, 0.16, '#2a1e1a', 0, 0.3, 0.06, {}, 'smooth');
-      for (const sx of [-1, 1]) b.box(0.04, 0.3, 0.04, '#2a1e1a', sx * 0.38, 0, 0.1);
-      b.box(0.24, 0.16, 0.02, '#f4f1ea', 0, 0.46, -0.0, { rx: -0.2 }, 'smooth');
-      b.cyl(0.03, 0.03, 0.08, BRASS, 0.3, 0.7, -0.12, {}, 'smooth', 6);
+      b.box(0.84, 0.2, 0.26, WD, 0, 0, -0.12, {}, 'smooth');
+      b.box(0.8, 0.5, 0.22, '#3a2a24', 0, 0.2, -0.12, {}, 'smooth');
+      b.glowBox(0.74, 0.44, 0.01, '#cfe8ff', 0.35, 0, 0.23, -0.005, {}, '#bfe0ff', true);
+      for (const y of [0.34, 0.5]) b.box(0.74, 0.015, 0.18, WD, 0, y, -0.12);
+      for (let k = 0; k < 4; k++) b.cyl(0.05, 0.05, 0.012, ['#f4f1ea', '#86b8e8', '#e8c27a', '#f4f1ea'][k], -0.27 + k * 0.18, 0.4, -0.18, { rx: 1.3 }, 'smooth', 10);
+      for (let k = 0; k < 3; k++) b.cyl(0.035, 0.03, 0.09, ['#c56b44', '#3f8a5a', '#3f6fb0'][k], -0.2 + k * 0.2, 0.515, -0.12, {}, 'smooth', 8);
+      b.box(0.86, 0.04, 0.26, '#2a1e1a', 0, 0.7, -0.12, {}, 'smooth');
+      for (const sx of [-1, 1]) b.ball(0.02, BRASS, sx * 0.05, 0.1, 0.02, {}, 'smooth', 0);
     },
   },
   gramophone: {
-    name: 'Gramophone', cat: 'deco', icon: 'music', size: [1, 1], cost: { coins: 180, plank: 2, ore: 2 }, comfort: 3, fun: 2, unlock: 5,
+    name: 'Tea Cart', cat: 'deco', icon: 'kitchen', size: [1, 1], cost: { coins: 180, plank: 2, ore: 2 }, comfort: 3, fun: 2, unlock: 5,
     build(b) {
-      b.box(0.26, 0.3, 0.26, WD, 0, 0, 0);
-      b.box(0.24, 0.08, 0.24, W, 0, 0.3, 0);
-      b.cyl(0.1, 0.1, 0.01, '#1b1d2b', 0, 0.385, 0, {}, 'smooth', 12);
-      b.box(0.015, 0.16, 0.015, BRASS, 0.08, 0.38, -0.08, { rz: -0.4 });
-      b.cyl(0.13, 0.02, 0.16, BRASS, 0.13, 0.5, -0.11, { rz: -0.9, ry: 0.6 }, 'smooth', 10);
+      for (const y of [0.12, 0.34]) b.box(0.34, 0.025, 0.24, WD, 0, y, 0);
+      for (const [x, z] of [[-0.15, -0.1], [0.15, -0.1], [-0.15, 0.1], [0.15, 0.1]]) b.box(0.02, 0.36, 0.02, BRASS, x, 0, z);
+      for (const x of [-0.13, 0.13]) b.cyl(0.04, 0.04, 0.015, '#3a3e48', x, 0.04, 0.12, { rx: Math.PI / 2 }, 'smooth', 8);
+      b.ball(0.065, '#f4f1ea', -0.04, 0.42, 0, { sy: 0.8 }, 'smooth', 1);
+      b.cyl(0.012, 0.02, 0.07, '#f4f1ea', 0.04, 0.42, 0, { rz: -0.9 }, 'smooth', 6);
+      for (const x of [0.08, 0.12]) b.cyl(0.022, 0.018, 0.035, '#e9e4da', x, 0.365, -0.07, {}, 'smooth', 8);
+      b.box(0.1, 0.03, 0.08, '#e8c27a', -0.06, 0.145, 0.02, {}, 'rough');
     },
   },
   tv: {
@@ -614,13 +617,15 @@ export const FURNITURE = {
       b.ball(0.025, '#ffd23d', -0.08, 0.66, 0.016, {}, 'smooth', 0);
     },
   },
+  // (save id 'portrait' kept: now a frame of pressed flowers)
   portrait: {
-    name: 'Family Portrait', cat: 'wall', icon: 'frame', size: [1, 1], cost: { coins: 60, plank: 1 }, comfort: 3, wall: true, unlock: 3,
+    name: 'Pressed Flowers', cat: 'wall', icon: 'frame', size: [1, 1], cost: { coins: 60, plank: 1 }, comfort: 3, wall: true, unlock: 3,
     build(b) {
       b.box(0.24, 0.32, 0.03, WD, 0, 0.46, 0);
-      b.box(0.19, 0.27, 0.01, '#3a3048', 0, 0.485, 0.015, {}, 'smooth');
-      b.ball(0.04, '#f1c7a3', 0, 0.64, 0.02, {}, 'smooth', 0);
-      b.box(0.12, 0.1, 0.01, '#c94a3d', 0, 0.52, 0.02, {}, 'smooth');
+      b.box(0.19, 0.27, 0.01, '#f2ead8', 0, 0.485, 0.015, {}, 'smooth');
+      b.box(0.012, 0.16, 0.01, '#4d8f45', 0, 0.5, 0.02, {}, 'smooth');
+      b.box(0.06, 0.02, 0.01, '#4d8f45', -0.025, 0.54, 0.02, { rz: 0.6 }, 'smooth');
+      for (const [x, y, c] of [[0, 0.66, '#e94f6a'], [-0.05, 0.6, '#ffd23d'], [0.05, 0.62, '#b58cff']]) b.ball(0.025, c, x, y, 0.022, { sz: 0.3 }, 'smooth', 0);
     },
   },
   clock: {

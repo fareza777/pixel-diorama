@@ -1,6 +1,7 @@
 // Pixel Diorama: World Builder - app bootstrap: engine, world, input, UI, game loop, saving,
 // lifecycle and adaptive quality.
 import './styles.css';
+import './styles-story.css';
 import * as THREE from 'three';
 import { PixelEngine } from './engine/pixel-engine.js';
 import { Environment } from './engine/environment.js';
@@ -16,12 +17,15 @@ import * as platform from './platform.js';
 import { BIOMES, BUILDINGS, RES } from './game/data.js';
 import { N, tileCenter } from './game/island.js';
 import { icon } from './ui/icons.js';
+import { Cinematic } from './ui/cinematic.js';
+import { initAds, showBanner, hideBanner, maybeInterstitial, showRewarded, showAdPrivacy } from './ads.js';
 
 const escH = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // big icon on top of an announcement (sits above the spinning .burst background)
 const evIcon = (name) => `<div style="position:relative;margin:0 auto 0.2em">${icon(name || 'event', 'xl')}</div>`;
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
+const SPLASH_MIN_MS = 2600; // the studio card and logo get their moment
 const TITLE_HOUR = 10.5;
 
 class App {
@@ -58,6 +62,7 @@ class App {
     this.cam = new CameraControl(canvas, engine);
     this.perf = new Perf((tier, extra) => this.applyQuality(tier, extra));
     this.ui = new UI(this);
+    this.cine = new Cinematic(this);
     this.cam.onTap = (x, y) => this.started && this.ui.onTap(x, y);
     this.cam.onPaint = (x, y, ph) => this.ui.onPaint(x, y, ph);
 
@@ -96,9 +101,19 @@ class App {
     this.lastFrame = this.last;
     requestAnimationFrame((t) => this.loop(t));
     this.ui.ready(hasSave);
-    // hide the static splash
-    document.getElementById('splash')?.classList.add('out');
-    setTimeout(() => document.getElementById('splash')?.remove(), 700);
+    // hide the static splash (after its studio card and logo had time to show)
+    const wait = Math.max(0, SPLASH_MIN_MS - (performance.now() - (window.__bootT || 0)));
+    setTimeout(() => {
+      document.getElementById('splash')?.classList.add('out');
+      setTimeout(() => document.getElementById('splash')?.remove(), 700);
+      let fresh = false;
+      try {
+        fresh = sessionStorage.getItem('pd-newgame') === '1';
+        sessionStorage.removeItem('pd-newgame');
+      } catch {}
+      if (fresh) this.begin();
+    }, wait);
+    initAds();
   }
 
   // ---------------------------------------------------------------- display
@@ -107,8 +122,8 @@ class App {
     const w = window.innerWidth, h = window.innerHeight;
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     const art = this.game.s?.settings.pixel ?? 1;
-    // around 400 art pixels on the short side looks crisp and reads well on a phone
-    const base = (Math.min(w, h) * dpr) / 400;
+    // art pixels on the short side follow the quality tier (400 on Low/Medium, 540 on High)
+    const base = (Math.min(w, h) * dpr) / (TIERS[this.perf?.tier]?.art || 400);
     const ps = Math.max(1, Math.round(base * art)) + extraPixelSize(this.perf?.extraPixel || 0);
     const W = Math.max(ps, Math.round((w * dpr) / ps) * ps), H = Math.max(ps, Math.round((h * dpr) / ps) * ps);
     const e = this.engine;
@@ -133,7 +148,9 @@ class App {
     look.tilt = this.game.s?.settings.tilt === false ? 0 : T.tilt;
     look.haze = T.haze;
     look.split = T.split;
+    look.aa = T.aa;
     this.world.setQuality({ grass: T.grass, mirror: T.mirror, lights: T.lights, smoke: T.smoke, ambient: T.ambient });
+    if (this.engine.low) this.engine.applyLook();
     if (!initial) this.fit();
   }
 
@@ -225,11 +242,13 @@ class App {
       if (byMayor) this.audio.play('sparkle');
       ui.toast(`${p.name} ${byMayor ? 'feels much better, thank you!' : 'got over the cold.'}${left ? ` ${left} still sick.` : ''}`, { icon: 'heart', ms: 3000 });
     });
+    g.on('story:chapter', (e) => ui.showChapter(e));
+    g.on('story:finale', (F) => ui.showFinale(F));
     g.on('event:host', ({ host, got, text }) => {
-      if (host.k === 'bard') this.audio.play('chord', { notes: [60, 64, 67, 72, 76], dur: 3, gain: 0.05 });
+      if (host.k === 'bard') this.audio.play('sparkle');
       else this.audio.play('horn', { pitch: 1.3, dur: 1.4 });
       ui.popup(w.mayor.pos.clone().add(new THREE.Vector3(0, 0.9, 0)), got);
-      ui.toast(text, { icon: host.k === 'bard' ? 'music' : 'crown', ms: 5000 });
+      ui.toast(text, { icon: host.k === 'bard' ? 'chat' : 'crown', ms: 5000 });
       this.saveSoon();
     });
     g.on('weather', (name) => this.env.setWeather(name));
@@ -242,6 +261,30 @@ class App {
       ui.titleCard(`Day ${d}`, `${g.seasonDef().name} · day ${g.seasonDay()} of the season`, 'sunrise');
       this.audio.play('chord', { notes: [62, 66, 69, 74], dur: 2.4, gain: 0.035 });
       this.save();
+    });
+    // ---- v1.3 systems
+    g.on('relief', ({ got, needFarm }) => {
+      this.audio.play('sparkle');
+      ui.popup(w.mayor.pos.clone().add(new THREE.Vector3(0, 0.9, 0)), got);
+      ui.toast(`Neighbours sent supplies to help out!${needFarm ? ' Build a Farm so it never runs out.' : ''}`, { icon: 'gift', ms: 5000 });
+      this.saveSoon();
+    });
+    g.on('project', ({ P, stage, done }) => {
+      this.audio.play('chord', { notes: [60, 64, 67, 72], dur: 2.5, gain: 0.05 });
+      ui.titleCard(P.name, done ? 'Project complete! Every island benefits.' : `Stage ${stage} of ${P.stages.length} finished`, P.icon);
+      this.save();
+    });
+    g.on('voyage:start', ({ to }) => {
+      ui.toast(`The merchant ship sets sail for ${BIOMES[to].short}.`, { icon: 'compass', ms: 3000 });
+      this.saveSoon();
+    });
+    g.on('voyage:back', ({ got }) => {
+      this.audio.play('coin');
+      ui.popup(w.mayor.pos.clone().add(new THREE.Vector3(0, 0.9, 0)), got);
+      this.save();
+    });
+    g.on('skill', ({ p, stars }) => {
+      if (stars >= 2) ui.toast(`${p.name} got better at the job: ${'★'.repeat(stars)}`, { icon: 'work', ms: 2600 });
     });
     // ---- v1.2 systems
     g.on('fire:start', ({ rec }) => {
@@ -402,16 +445,61 @@ class App {
     if (this.game.s.settings.sound && !this.audio.on) {
       try {
         await this.audio.start();
-        this.audio.setLoop('lofi', this.game.s.settings.music ? 0.75 : 0);
       } catch (e) {
         console.warn('audio blocked', e);
       }
     }
   }
 
+  /** Play / Continue on the title: a brand-new story starts with the intro film. */
+  begin() {
+    if (this.started || this.cine.active) return;
+    if (!this.game.s.story?.intro) this.playIntro(true);
+    else this.start();
+  }
+
+  /** The intro film; from the menu it returns to the title, the first time it leads into the game. */
+  async playIntro(thenStart = false) {
+    if (this.cine.active) return;
+    await this.unlockAudio();
+    this.cine.play(() => {
+      this.game.s.story.intro = 1;
+      if (thenStart) this.start();
+      else this.resetCamera();
+    });
+  }
+
+  /** Rewarded ad on the Welcome back card: the offline earnings are paid a second time. */
+  async offlineDouble() {
+    const off = this.offline;
+    if (!off || this._offX2) return;
+    if (!(await this.rewardedAd())) return;
+    this._offX2 = true;
+    const got = this.game.give(off.got);
+    this.ui.closeModal();
+    this.ui.popup(this.world.mayor.pos.clone().add(new THREE.Vector3(0, 0.9, 0)), got);
+    this.audio.play('coin');
+    this.save();
+  }
+
+  adPrivacy() {
+    showAdPrivacy().then((ok) => !ok && this.ui.toast('Ad privacy options are not needed in your region.', { icon: 'info' }));
+  }
+
+  /** Opt-in rewarded ad; resolves true when the reward was earned. */
+  async rewardedAd() {
+    this.audio.setVolume(0);
+    const ok = await showRewarded();
+    this.audio.setVolume(this.game.s.settings.volume);
+    if (!ok) this.ui.toast('The ad did not finish, so there is no reward this time.', { kind: 'warn' });
+    return ok;
+  }
+
   async start() {
     if (this.started) return;
     this.started = true;
+    showBanner();
+    setTimeout(() => this.game.checkStory(), 1200);
     await this.unlockAudio();
     this.audio.play('quest');
     this.ui.hideTitle();
@@ -420,13 +508,15 @@ class App {
     const off = this.offline;
     if (off && Object.keys(off.got).length) {
       const h = Math.floor(off.seconds / 3600), m = Math.floor((off.seconds % 3600) / 60);
-      this.ui.queueModal(() => this.ui.modal(`<h2>Welcome back!</h2><p>You were away for ${h ? h + ' h ' : ''}${m} min. Your villagers kept working:</p>${this.ui.rewardHTML(off.got)}<button class="btn primary big" data-act="modal-ok">Collect</button>`));
+      this.ui.queueModal(() => this.ui.modal(`<h2>Welcome back!</h2><p>You were away for ${h ? h + ' h ' : ''}${m} min. Your villagers kept working:</p>${this.ui.rewardHTML(off.got)}<div class="row"><button class="btn" data-act="modal-ok">Collect</button><button class="btn buy" data-act="offline-x2">${icon('xp')} Watch ad: x2</button></div>`));
     }
-    if (this.game.dailyStatus().available) this.ui.queueModal(() => this.ui.openDaily());
+    // a brand-new player meets the story first; the Rewards button still glows for the daily gift
+    if (this.game.dailyStatus().available && this.game.s.story.ch > 0) this.ui.queueModal(() => this.ui.openDaily());
     this.ui._nextModal();
   }
 
-  travel(id) {
+  async travel(id) {
+    await maybeInterstitial();
     const fade = document.getElementById('fade') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'fade' });
     fade.innerHTML = '';
     fade.classList.add('on');
@@ -448,9 +538,6 @@ class App {
       case 'sound':
         if (S.sound) this.unlockAudio();
         else this.audio.stop();
-        break;
-      case 'music':
-        this.audio.setLoop('lofi', S.music ? 0.75 : 0);
         break;
       case 'volume':
         this.audio.setVolume(S.volume);
@@ -484,7 +571,7 @@ class App {
   // ---------------------------------------------------------------- saving & lifecycle
 
   save() {
-    if (!this.game.s) return;
+    if (!this.game.s || this.wiping) return;
     platform.writeSave(this.game.serialize());
     this._saveT = 0;
   }
@@ -617,8 +704,8 @@ class App {
     this.env.tween = null;
     // the title screen always shows the island on a clear morning; the real clock and weather
     // take over once play starts (weather blends in, the hour cuts under the title fade)
-    this.env.hour = this.photo?.hour ?? (this.started ? g.s.time.hour : TITLE_HOUR);
-    const wn = this.started ? g.weatherName() : 'clear';
+    this.env.hour = this.cine.active ? this.cine.hour : this.photo?.hour ?? (this.started ? g.s.time.hour : TITLE_HOUR);
+    const wn = this.cine.active ? this.cine.weather : this.started ? g.weatherName() : 'clear';
     if (this.env.weather !== wn) this.env.setWeather(wn);
     if (this.world.scene) this.env.center.set(0, 0, 0);
     this.env.update(dt);
@@ -631,7 +718,8 @@ class App {
     this.world.update(dt, dtH);
     this.interior.update(dt);
     g.update(dt);
-    if (!this.started) this.cam.goal.az += dt * 4;
+    if (this.cine.active) this.cine.update(dt);
+    else if (!this.started) this.cam.goal.az += dt * 4;
     if (this.photo?.orbit) this.cam.goal.az += dt * 7;
     this.cam.update(dt);
     this.audio.update(dt, this.env);
@@ -643,6 +731,7 @@ class App {
       if (this._tutT > 1) {
         this._tutT = 0;
         this.ui.tutorial();
+        this.game.checkStory();
       }
     }
   }

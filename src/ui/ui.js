@@ -14,6 +14,9 @@ import { N, idx, tileCenter } from '../game/island.js';
 import { buzz } from '../platform.js';
 import NOXE_LICENSE from '../engine/LICENSE-noxe-pixel-engine.txt?raw';
 import { TownMixin } from './town.js';
+import { FrontierUIMixin } from './frontier-ui.js';
+import { MenuMixin } from './menu.js';
+import { StoryUIMixin } from './story-ui.js';
 import { JuiceMixin } from './juice.js';
 import { TECHS } from '../game/systems.js';
 
@@ -73,6 +76,7 @@ export class UI {
         </div>
         <div class="hud-row res" id="resbar" data-act="inventory"></div>
         <div id="event" class="banner hidden" data-act="eventinfo"></div>
+        <button id="story" class="hidden" data-act="story"></button>
       </div>
       <div id="side">
         <button class="ibtn" data-act="quests">${icon('quest')}<i class="badge hidden" id="b-quests"></i><small>Quests</small></button>
@@ -102,13 +106,7 @@ export class UI {
       <div id="popups"></div>
       <div id="emotes"></div>
       <div id="fps" class="hidden"></div>
-      <div id="title">
-        <div class="title-box">
-          <div class="logo"><span class="l1">PIXEL</span><span class="l2">DIORAMA</span><span class="l3">World Builder</span></div>
-          <button class="btn primary big" data-act="start" id="btn-start">Loading...</button>
-          <div class="credit">F7 Developer</div>
-        </div>
-      </div>`;
+      ${this.titleHTML()}`;
     this.root.addEventListener('click', (e) => this._click(e));
     this.root.addEventListener('pointerdown', () => this.app.unlockAudio?.(), { once: true });
     // emote pool
@@ -126,6 +124,7 @@ export class UI {
     const b = $('#btn-start');
     b.textContent = hasSave ? 'Continue' : 'Play';
     b.disabled = false;
+    $('#btn-new').classList.toggle('hidden', !hasSave);
   }
 
   hideTitle() {
@@ -148,7 +147,7 @@ export class UI {
     if (!keepSound.includes(act)) this.sfx('ui');
     buzz('light');
     switch (act) {
-      case 'start': this.app.start(); break;
+      case 'start': this.app.begin(); break;
       case 'close': this.closeSheet(); break;
       case 'modal-ok': this.closeModal(el.dataset.next); break;
       case 'settings': this.openSettings(); break;
@@ -224,7 +223,7 @@ export class UI {
       case 'wipe': this.confirmWipe(); break;
       case 'hint-ok': this.dismissHint(); break;
       case 'tab': this._tab(el); break;
-      default: this._townClick(act, arg) || this._photoClick(act, arg); break;
+      default: this._townClick(act, arg) || this._frontierClick(act, arg) || this._menuClick(act) || this._storyClick(act, arg) || this._photoClick(act, arg); break;
     }
   }
 
@@ -238,7 +237,11 @@ export class UI {
     $('.ring').style.setProperty('--p', `${Math.round(pct * 100)}%`);
     if (force) this._coinShown = P.coins;
     const I = g.I;
-    $('#c-pop span').textContent = `${I.npcs.length}/${g.housingCap()}`;
+    // villagers / beds: red when someone has no home yet
+    const beds = g.housingCap();
+    $('#c-pop span').textContent = `${I.npcs.length}/${beds}`;
+    $('#c-pop').classList.toggle('low', I.npcs.length > beds);
+    $('#c-pop').title = `${I.npcs.length} villagers, room for ${beds}`;
     const hap = Math.round(g.islandHappiness());
     $('#c-happy span').textContent = `${hap}%`;
     $('#c-happy img').src = iconURL(hap >= 45 ? 'happy' : 'sad');
@@ -256,8 +259,13 @@ export class UI {
     }
     // resources: always the basics, plus anything the player owns
     const cap = g.storageCap();
-    const keys = RES_KEYS.filter((k) => ['wood', 'stone', 'food'].includes(k) || s.res[k] > 0);
-    const html = keys.map((k) => `<div class="chip sm ${s.res[k] >= cap ? 'full' : ''} ${k === 'food' && s.res[k] < I.npcs.length * 2 ? 'low' : ''}">${icon(RES[k].icon)}<span>${fmt(s.res[k])}</span></div>`).join('') + `<div class="chip sm cap">${icon('storage')}<span>${fmt(cap)}</span></div>`;
+    // one compact row: the three basics, then a "+N" chip for everything else (tap opens the inventory)
+    const BASIC = ['wood', 'stone', 'food'];
+    const extra = RES_KEYS.filter((k) => !BASIC.includes(k) && s.res[k] > 0);
+    const extraFull = extra.some((k) => s.res[k] >= cap);
+    const html = BASIC.map((k) => `<div class="chip sm ${s.res[k] >= cap ? 'full' : ''} ${k === 'food' && s.res[k] < I.npcs.length * 2 ? 'low' : ''}">${icon(RES[k].icon)}<span>${fmt(s.res[k])}</span></div>`).join('')
+      + (extra.length ? `<div class="chip sm more ${extraFull ? 'full' : ''}">${icon(RES[extra[0]].icon)}<span>+${extra.length}</span></div>` : '')
+      + `<div class="chip sm cap">${icon('storage')}<span>${fmt(cap)}</span></div>`;
     if (html !== this._resHTML) {
       $('#resbar').innerHTML = html;
       this._resHTML = html;
@@ -280,7 +288,8 @@ export class UI {
     } else eb.classList.add('hidden');
     $('#btn-follow').classList.toggle('on', !!this.app.cam.follow);
     // the Town button: ready orders and missions, and the running research
-    const nt = g.readyOrders() + g.claimableMissions();
+    this.refreshStory();
+    const nt = g.readyOrders() + g.claimableMissions() + g.readyVoyages();
     const bt = $('#b-town');
     bt.classList.toggle('hidden', !nt);
     bt.textContent = nt;
@@ -465,10 +474,20 @@ export class UI {
     this._buildCat = cat;
     const g = this.game, biome = g.biome;
     const tabs = BUILD_CATS.map((c) => `<button class="tab ${c.id === cat ? 'on' : ''}" data-act="buildcat" data-arg="${c.id}">${esc(c.name)}</button>`).join('');
+    // buildings of other islands are listed last as a preview of what those islands offer
+    const here = (id) => g.biomeAllows(id);
     const cards = Object.entries(BUILDINGS)
-      .filter(([id, d]) => d.cat === cat && !d.fixed && g.biomeAllows(id))
-      .sort((a, b) => a[1].unlock - b[1].unlock)
+      .filter(([, d]) => d.cat === cat && !d.fixed)
+      .sort((a, b) => (here(a[0]) ? 0 : 1) - (here(b[0]) ? 0 : 1) || a[1].unlock - b[1].unlock)
       .map(([id, d]) => {
+        if (!here(id)) {
+          const where = (d.biomes || []).map((bi) => BIOMES[bi]?.short).filter(Boolean).join(', ');
+          return `<button class="card locked away" disabled>
+          <div class="thumb"><img src="${iconURL('map')}" alt=""></div>
+          <b>${esc(d.name)}</b>
+          <div class="lockline">${icon('map')} ${where ? `Only on ${esc(where)}` : 'Not on this island'}</div>
+        </button>`;
+        }
         const locked = !g.isUnlocked(id);
         const limited = d.limit && g.countType(id, g.I) >= d.limit;
         const src = thumb(id, biome, 0, (url) => {
@@ -1015,7 +1034,7 @@ export class UI {
           <div class="face" style="--skin:${p.look.skin};--hair:${p.look.hair};--coat:${p.look.coat}"><i class="h"></i><i class="s"></i><i class="b"></i></div>
           <div><div class="trait">${esc(tr.name)} · <small>${esc(tr.desc)}</small></div>
           <div class="hearts">${Array.from({ length: 5 }, (_, k) => `<img class="ic ${k < hearts ? '' : 'dim'}" src="${iconURL('heart')}">`).join('')}</div>
-          <div class="muted">${doing}</div></div>
+          <div class="muted">${doing}${job ? ` · ${this.skillStars(p)}` : ''}</div></div>
         </div>
         <div class="speech">"${esc(this._npcLine)}"</div>
         <div class="needs">${bar(p.mood, p.mood > 45 ? 'happy' : 'sad', 'Mood')}${bar(p.need.food, 'food', 'Food')}${bar(p.need.energy, 'energy', 'Energy')}${bar(p.need.fun, 'fun', 'Fun')}</div>
@@ -1370,11 +1389,12 @@ export class UI {
     const def = EVENTS.find((e) => e.id === ev.id);
     const bad = def.kind === 'bad';
     const left = Math.max(0, ev.until - g.absHour());
-    const pills = (def.effect || []).map((e) => `<span class="pill ${bad ? '' : 'on'}">${esc(e)}</span>`).join('');
+    const pills = (def.effect || []).map((e) => `<span class="pill ${bad ? '' : 'on'} ${ev.guarded ? 'struck' : ''}">${esc(e)}</span>`).join('');
     let prog = '';
     if (ev.props?.length) prog = `<p><b>Found ${ev.found || 0} of ${ev.props.length}</b></p>`;
     if (ev.sick) prog = `<p><b>${ev.sick.length} of ${ev.total} villagers still sick</b></p>`;
     if (ev.host) prog += `<p class="muted">${ev.host.met ? 'You already greeted the guest.' : 'You have not greeted the guest yet.'}</p>`;
+    prog += this.hazardNote(ev, def);
     if (ev.id === 'birthday') {
       const p = g.I.npcs.find((q) => q.id === ev.npc);
       if (p) prog = `<p><b>Birthday: ${esc(p.name)}</b>${ev.gifted ? ' · present given' : ''}</p>`;
@@ -1394,7 +1414,7 @@ export class UI {
     const opt = (key, v, label) => `<button class="seg ${String(S[key]) === String(v) ? 'on' : ''}" data-act="set" data-arg="${key}" data-v="${v}">${label}</button>`;
     const html = `
       <div class="setting"><span>${icon('sound')} Sound</span><div class="segs">${opt('sound', true, 'On')}${opt('sound', false, 'Off')}</div></div>
-      <div class="setting"><span>${icon('music')} Music</span><div class="segs">${opt('music', true, 'On')}${opt('music', false, 'Off')}</div></div>
+      <div class="setting"><span>${icon('chat')} Story voice</span><div class="segs">${opt('voice', true, 'On')}${opt('voice', false, 'Off')}</div></div>
       <div class="setting"><span>Ambience volume</span><div class="segs">${opt('volume', 0.3, 'Low')}${opt('volume', 0.7, 'Medium')}${opt('volume', 1, 'High')}</div></div>
       <div class="setting"><span>Effects volume</span><div class="segs">${opt('sfx', 0.4, 'Low')}${opt('sfx', 0.9, 'Medium')}${opt('sfx', 1.4, 'High')}</div></div>
       <div class="setting"><span>Graphics quality</span><div class="segs">${opt('quality', 'auto', 'Auto')}${opt('quality', 'low', 'Low')}${opt('quality', 'medium', 'Medium')}${opt('quality', 'high', 'High')}</div></div>
@@ -1404,8 +1424,8 @@ export class UI {
       <div class="setting"><span>Screen shake</span><div class="segs">${opt('shake', true, 'On')}${opt('shake', false, 'Off')}</div></div>
       <div class="setting"><span>Miniature focus</span><div class="segs">${opt('tilt', true, 'On')}${opt('tilt', false, 'Off')}</div></div>
       <div class="setting"><span>Show FPS</span><div class="segs">${opt('fps', true, 'Yes')}${opt('fps', false, 'No')}</div></div>
-      <div class="btns"><button class="btn" data-act="credits">${icon('info')} Credits & Licenses</button><button class="btn danger" data-act="wipe">${icon('trash')} Delete Data</button></div>
-      <p class="muted center">Pixel Diorama: World Builder v${this.app.version} · Fully offline. No ads, no in-app purchases.</p>`;
+      <div class="btns"><button class="btn" data-act="journal">${icon('quest')} Journal</button><button class="btn" data-act="credits">${icon('info')} Credits & Licenses</button><button class="btn" data-act="menu-privacy">${icon('eye')} Ad privacy</button><button class="btn danger" data-act="wipe">${icon('trash')} Delete Data</button></div>
+      <p class="muted center">Pixel Diorama: World Builder v${this.app.version} · Plays offline · Ads by Google AdMob · No in-app purchases.</p>`;
     this.openSheet(`${icon('gear')} Settings`, html, { kind: 'settings' });
   }
 
@@ -1427,7 +1447,7 @@ export class UI {
         <pre>${esc(NOXE_LICENSE)}</pre>
         <h3>Open source libraries</h3>
         <p><b>three.js</b> © 2010-2026 three.js authors, MIT license.<br><b>Capacitor</b> © Ionic, MIT license.</p>
-        <p class="muted">All models, icons and sounds in this game are generated procedurally by code. No third-party assets.</p>
+        <p class="muted">All models, icons and sounds in this game are generated procedurally by code. The story narration was made with neural text-to-speech. Ads are served by Google AdMob.</p>
       </div>`, { kind: 'credits' });
   }
 
@@ -1451,14 +1471,21 @@ export class UI {
     this.refreshHUD();
   }
 
-  showHint(text, kind = 'tip') {
+  /** A short tip above the toolbar; `target` (a selector) gets a pulsing ring so the tip points at it. */
+  showHint(text, kind = 'tip', target = null) {
     const h = $('#hint');
     h.innerHTML = `${icon('info')}<span>${esc(text)}</span><button class="ibtn sm" data-act="hint-ok">${icon('close')}</button>`;
     h.classList.remove('hidden');
     this._hintKind = kind;
+    this._coach(target);
+  }
+  _coach(target) {
+    document.querySelectorAll('.coach').forEach((el) => el.classList.remove('coach'));
+    if (target) document.querySelector(target)?.classList.add('coach');
   }
   dismissHint() {
     $('#hint').classList.add('hidden');
+    this._coach(null);
     if (this._hintKind === 'tutorial') this.game.s.tutorialSkip = (this.game.s.tutorialSkip || 0) + 1;
     this._hintKind = null;
   }
@@ -1470,9 +1497,9 @@ export class UI {
     if (this.mode !== 'explore' || (s.tutorialSkip || 0) > 0 && s.tutorial >= 99) return;
     const steps = [
       { done: () => s.stats.gathered >= 1, text: 'Welcome, Mayor! Tap a tree or rock to gather it.' },
-      { done: () => g.countType('rumah') >= 1, text: 'Great! Open the Build menu below and put up a House.' },
-      { done: () => g.countType('ladang') >= 1, text: 'Villagers need food. Build a Farm (Production tab).' },
-      { done: () => s.quests.done.length >= 1, text: 'Check Quests on the right. Finish them for big rewards!' },
+      { done: () => g.countType('rumah') >= 1, text: 'Great! Tap Build and put up a House.', target: '[data-act="build"]' },
+      { done: () => g.countType('ladang') >= 1, text: 'Villagers need food. Build a Farm (Production tab).', target: '[data-act="build"]' },
+      { done: () => s.quests.done.length >= 1, text: 'Finish Quests for big rewards!', target: '[data-act="quests"]' },
       { done: () => s.stats.talked >= 1, text: 'Tap a villager to chat and see what they need.' },
     ];
     while (s.tutorial < steps.length && steps[s.tutorial].done()) s.tutorial++;
@@ -1482,13 +1509,13 @@ export class UI {
       return;
     }
     if ((s.tutorialSkip || 0) >= 3) return;
-    const text = steps[s.tutorial].text;
+    const { text, target } = steps[s.tutorial];
     if (this._hintText !== text || this._hintKind !== 'tutorial') {
       if (this._hintKind && this._hintKind !== 'tutorial') return;
-      this.showHint(text, 'tutorial');
+      this.showHint(text, 'tutorial', target);
       this._hintText = text;
     }
   }
 }
 
-Object.assign(UI.prototype, TownMixin, JuiceMixin);
+Object.assign(UI.prototype, TownMixin, JuiceMixin, FrontierUIMixin, MenuMixin, StoryUIMixin);

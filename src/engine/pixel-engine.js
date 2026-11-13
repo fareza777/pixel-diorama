@@ -16,9 +16,10 @@ export const defaultLook = () => ({
   quantize: 'levels',
   // Pixel Diorama: more levels, lighter dither and vignette, a little more exposure. The original
   // values (14 levels, 0.55 dither, 0.22 vignette) read as dark and grainy on phone screens.
-  levels: 20,
+  // v1.3: still more levels and a much lighter dither so surfaces read clean and sharp
+  levels: 32,
   palette: 'Harbour',
-  dither: 0.3,
+  dither: 0.12,
   outline: 0.5,
   highlight: 0.3,
   edge: 0.3,
@@ -29,12 +30,14 @@ export const defaultLook = () => ({
   saturation: 1.16,
   vignette: 0.1,
   // Pixel Diorama: miniature focus (tilt-shift), aerial haze and split-tone grading
-  tilt: 0.5,
+  tilt: 0,
   tiltFocus: 0.47,
-  tiltBand: 0.17,
-  haze: 0.13,
+  tiltBand: 0.24,
+  haze: 0.05,
   split: 0.2,
   texture: 1.0,
+  aa: 0,
+  msaa: false,
 });
 
 export const LOOK_PRESETS = {
@@ -105,7 +108,7 @@ export class PixelEngine {
       uPalSize: { value: 0 },
       uMilky: { value: 0 }, uAurora: { value: 0 }, uMoon: { value: 0 }, uMoonPos: { value: new THREE.Vector2(0.82, 0.8) },
       tTilt: { value: null }, uTilt: { value: 0 }, uTiltFocus: { value: 0.47 }, uTiltBand: { value: 0.17 },
-      uHaze: { value: 0 }, uHazeColor: col(), uDepthMid: { value: 0.44 },
+      uHaze: { value: 0 }, uHazeColor: col(), uDepthMid: { value: 0.44 }, uAA: { value: 0 },
       uSplit: { value: 0 }, uSplitLo: { value: new THREE.Color(1, 1, 1) }, uSplitHi: { value: new THREE.Color(1, 1, 1) },
     });
     this.mUpscale = mk(UPSCALE_FRAG, { tPix: { value: null }, uPixel: { value: 4 }, uLow: v2() });
@@ -122,7 +125,7 @@ export class PixelEngine {
 
   applyLook() {
     const L = this.look;
-    if (Math.round(L.pixelSize) !== this.low.ps) this._alloc();
+    if (Math.round(L.pixelSize) !== this.low.ps || !!L.msaa !== this._msaa) this._alloc();
     shared.uTexture.value = L.texture;
     const pal = paletteArrays(PALETTES[L.palette] || PALETTES.Harbour);
     const u = this.mComposite.uniforms;
@@ -139,7 +142,11 @@ export class PixelEngine {
     this.rtMirror = new THREE.WebGLRenderTarget(W, H, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false, type: THREE.HalfFloatType, depthBuffer: true });
     shared.uMirror.value = this.rtMirror.texture;
     const nearest = { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false };
-    this.rtScene = new THREE.WebGLRenderTarget(W, H, { ...nearest, type: THREE.HalfFloatType, count: 2, depthBuffer: true });
+    // v1.3: look.msaa adds hardware MSAA on the low-res scene (smoothest edges, but far too slow on
+    // mid-range phones); look.aa is the cheap edge smoothing in the pixel pass that every tier can afford
+    this._msaa = !!this.look.msaa;
+    const samples = this._msaa ? 4 : 0;
+    this.rtScene = new THREE.WebGLRenderTarget(W, H, { ...nearest, type: THREE.HalfFloatType, count: 2, depthBuffer: true, samples });
     this.rtScene.depthTexture = new THREE.DepthTexture(W, H);
     const lin = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false, type: THREE.HalfFloatType, depthBuffer: false };
     const hw = Math.max(1, Math.ceil(W / 2)), hh = Math.max(1, Math.ceil(H / 2));
@@ -352,6 +359,7 @@ export class PixelEngine {
     u.uSaturation.value = L.saturation;
     u.uTint.value.copy(p.tint).convertLinearToSRGB();
     u.uVignette.value = L.vignette;
+    u.uAA.value = L.aa || 0;
     u.uMode.value = QUANTIZE[L.quantize] ?? 1;
     u.uLevels.value = L.levels;
     u.uDither.value = L.dither;

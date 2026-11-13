@@ -2,7 +2,7 @@
 // quests, achievements, random events, daily rewards and offline progress. No rendering here.
 import {
   RES, RES_KEYS, BIOMES, BIOME_KEYS, BUILDINGS, MAX_LEVEL, upgradeCost, RECIPES, TOOL_TIERS, NODES, FIRST_NAMES, TRAITS,
-  QUESTS, ACHIEVEMENTS, EVENTS, EVENT_BY_ID, xpForLevel, MAX_PLAYER_LEVEL, DAILY_REWARDS, START, PAINTS,
+  QUESTS, ACHIEVEMENTS, EVENTS, EVENT_BY_ID, LEGACY_NAMES, xpForLevel, MAX_PLAYER_LEVEL, DAILY_REWARDS, START, PAINTS,
   SEASONS, SEASON_DAYS, WALKABLE_TYPES,
 } from './data.js';
 import { N, idx, inside, generateIsland, packIsland, unpackIsland, WALKABLE, ROADS, STEP } from './island.js';
@@ -10,6 +10,8 @@ import { randomLook } from './people.js';
 import { rng } from '../engine/kit.js';
 import { FURNITURE, WALLPAPERS, FLOORS, homeStats, defaultFurniture, ENTERABLE } from './furniture.js';
 import { SystemsMixin } from './systems.js';
+import { FrontierMixin } from './frontier.js';
+import { StoryMixin } from './story.js';
 
 export const SAVE_VERSION = 1;
 export const SECONDS_PER_GAME_HOUR = 30; // a full day takes 12 real minutes at 1x
@@ -72,7 +74,7 @@ export class Game {
       event: null,
       eventCd: 6,
       weather: {},
-      settings: { sound: true, music: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true, shake: true, tilt: true },
+      settings: { sound: true, volume: 0.7, sfx: 0.9, quality: 'auto', pixel: 1, fps: false, speed: 1, haptics: true, shake: true, tilt: false, gfx13: true, voice: true },
       tips: 0,
       tutorial: 0,
       furn: {}, // furniture in storage: id -> count
@@ -85,6 +87,8 @@ export class Game {
     this.refreshIsland();
     this.refreshQuests();
     this.initSystems();
+    this.initFrontier();
+    this.initStory();
   }
 
   serialize() {
@@ -106,7 +110,9 @@ export class Game {
     d.player = { ...base.player, ...d.player };
     d.res = { ...Object.fromEntries(RES_KEYS.map((k) => [k, 0])), ...d.res };
     d.stats = { ...base.stats, ...d.stats };
-    d.settings = { ...base.settings, ...d.settings };
+    // v1.3 sharper look: the miniature blur starts off once for older saves (players can turn it back on)
+    const preGfx13 = !d.settings?.gfx13;
+    d.settings = { ...base.settings, ...d.settings, ...(preGfx13 ? { tilt: false, gfx13: true } : {}) };
     d.market = { ...base.market, ...d.market };
     d.quests = d.quests || base.quests;
     d.craft = d.craft || base.craft;
@@ -124,9 +130,16 @@ export class Game {
     }
     d.eventCd = d.eventCd ?? 0;
     for (const k of Object.keys(d.islands)) d.islands[k] = unpackIsland(d.islands[k]);
+    // v1.3: villagers from older saves get the matching global name
+    for (const I of Object.values(d.islands)) for (const p of I.npcs || []) {
+      const i = LEGACY_NAMES.indexOf(p.name);
+      if (i >= 0) p.name = FIRST_NAMES[i];
+    }
     if (!d.islands[d.current]) d.current = 'desa';
     this.s = d;
     this.initSystems();
+    this.initFrontier();
+    this.initStory();
     this.refreshIsland();
     this.refreshQuests();
   }
@@ -631,6 +644,7 @@ export class Game {
     N2.food = clamp(N2.food - dtH * 4.2 * (tr.hunger || 1) * (fx.hunger || 1), 0, 100);
     if (ctx.sleeping) N2.energy = clamp(N2.energy + dtH * 13 * (fx.sleep || 1) * (sick ? 0.6 : 1), 0, 100);
     else N2.energy = clamp(N2.energy - dtH * (ctx.working ? 4 : 2.5) * (fx.energy || 1) * (sick ? 1.8 : 1), 0, 100);
+    if (ctx.working && p.job) this.trainNpc(p, dtH);
     if (ctx.leisure) N2.fun = clamp(N2.fun + dtH * (ctx.festival ? 30 : 14 * (fx.fun || 1)) * (tr.social || 1), 0, 100);
     else if (!ctx.sleeping) N2.fun = clamp(N2.fun - dtH * 2.2, 0, 100);
     const home = p.home ? this.buildingById(p.home) : null;
@@ -861,6 +875,8 @@ export class Game {
     this.produce(dtH, presence);
     this.fireTick(dtH);
     if (Math.floor(T.hour) !== prevHour) this.hourly();
+    // end an event the moment its time runs out (not at the next full hour)
+    else if (this.s.event && this.I.lastAbs >= this.s.event.until) this.endEvent('time');
   }
 
   multipliers(res) {
@@ -874,7 +890,7 @@ export class Game {
   eventMult(res) {
     const ev = this.eventHere();
     if (!ev) return 1;
-    const fx = EVENT_BY_ID[ev.id]?.fx || NO_FX;
+    const fx = this.fxOf(ev);
     let m = 1;
     if (fx.mult) m *= (fx.mult[res] ?? 1) * (fx.mult.all ?? 1);
     if (ev.id === 'bees' && res === 'food') m *= Math.max(0.4, 1 - 0.15 * this.propsLeft(ev));
@@ -921,7 +937,7 @@ export class Game {
     const mood = this.islandHappiness();
     const moodK = 0.7 + mood / 200;
     const ev = this.eventHere();
-    const fx = ev ? EVENT_BY_ID[ev.id]?.fx || NO_FX : NO_FX;
+    const fx = this.fxOf(ev);
     for (const b of I.buildings) {
       const def = BUILDINGS[b.type];
       if (!b.built || b.ruin) continue;
@@ -932,7 +948,7 @@ export class Game {
         const lvl = 1 + 0.5 * ((b.level || 1) - 1);
         let k = workers * lvl * moodK * dtH;
         if (def.nearNode) k *= this.nodeBonus(b, def.nearNode);
-        k *= this.boostOf(b);
+        k *= this.boostOf(b) * this.skillMult(b, I);
         // processing buildings use up their inputs from storage; without them they stall
         if (def.consume) {
           const save = 1 - (this.techFx().consume || 0);
@@ -1001,6 +1017,7 @@ export class Game {
     const I = this.I;
     const h = this.s.time.hour;
     this.regrowNodes();
+    this.reliefHourly();
     // weather changes now and then
     const W = this.s.weather[this.biome];
     const now = this.absHour();
@@ -1056,7 +1073,7 @@ export class Game {
     const B = BIOMES[this.biome];
     const ev = this.s.event;
     let name;
-    const forced = ev && ev.island === this.biome ? EVENT_BY_ID[ev.id]?.fx?.weather : null;
+    const forced = ev && ev.island === this.biome ? this.fxOf(ev).weather : null;
     if (forced) name = forced;
     else {
       const S = this.seasonDef();
@@ -1095,19 +1112,24 @@ export class Game {
   }
   /** The running event's simulation hooks on this island (an empty object when there are none). */
   evFx() {
-    const ev = this.eventHere();
-    return (ev && EVENT_BY_ID[ev.id]?.fx) || NO_FX;
+    return this.fxOf(this.eventHere());
+  }
+  /** An event's effects; a hazard met by its counter building (Sea Wall, Windbreak...) uses the mild guardFx. */
+  fxOf(ev) {
+    const d = ev && EVENT_BY_ID[ev.id];
+    if (!d) return NO_FX;
+    return (ev.guarded && d.guardFx) || d.fx || NO_FX;
   }
   buildSpeed() {
     return (this.evFx().build || 1) * (1 + (this.techFx().build || 0));
   }
-  /** Pose ('dance' | 'wave') when villagers should gather at the plaza at hour h, else null. */
+  /** Pose ('clap' | 'wave') when villagers should gather at the plaza at hour h, else null. */
   eventGather(h) {
     const ev = this.eventHere();
     const fx = ev && EVENT_BY_ID[ev.id]?.fx;
     if (!fx?.gather) return null;
     if (fx.gatherFor && this.absHour() - (ev.start ?? 0) > fx.gatherFor) return null;
-    return h >= fx.gather[0] && h < fx.gather[1] ? fx.pose || 'dance' : null;
+    return h >= fx.gather[0] && h < fx.gather[1] ? fx.pose || 'clap' : null;
   }
   propsLeft(ev = this.s.event) {
     if (!ev?.props) return 0;
@@ -1157,6 +1179,8 @@ export class Game {
         break;
       }
     }
+    // Island Defences (Grand Project) stop some bad biome hazards before they start
+    if (pick.counter && Math.random() < (this.techFx().hazard || 0)) return;
     this.startEvent(pick.id);
   }
 
@@ -1173,6 +1197,7 @@ export class Game {
     this.s.stats.events++;
     this.s.lastEvent = id;
     const I = this.I;
+    if (e.counter && I.buildings.some((b) => b.type === e.counter && b.built && !b.ruin)) ev.guarded = 1;
     if (id === 'chest') I.chest = this.randomFreeTile();
     if (id === 'cat') I.cat = this.randomFreeTile();
     if (id === 'visitor') I.visitor = { look: { skin: '#e0ac85', coat: '#6b4a8a', pants: '#2a2e3a', hair: '#9a9a9a', hat: '#2a2e3a', umbrella: '#6b4a8a' }, talked: false };
@@ -1412,7 +1437,7 @@ export class Game {
       case 'chest': reward = this.chestReward(); this.s.stats.chests++; text = 'You found a hidden chest!'; break;
       case 'dig': reward = this.chestReward(1.8); this.s.stats.chests++; text = 'X marks the spot: buried treasure!'; break;
       case 'bees': reward = { food: 8 + lvl * 2, coins: 15 + lvl * 3, xp: 15 }; text = 'Shoo! The swarm left its honey behind.'; break;
-      case 'wisp': reward = { crystal: 1 + (lvl >= 8 ? 1 : 0), coins: 20 + lvl * 5, xp: 15 }; text = 'You caught a ghost wisp!'; break;
+      case 'wisp': reward = { crystal: 1 + (lvl >= 8 ? 1 : 0), coins: 20 + lvl * 5, xp: 15 }; text = 'You caught a glowing marsh light!'; break;
       default: reward = { xp: 10 }; text = '';
     }
     const got = this._grant(ev, reward);
@@ -1423,7 +1448,7 @@ export class Game {
     return got;
   }
 
-  /** The Mayor greets the event's visiting host (bard, royal). */
+  /** The Mayor greets the event's visiting host (storyteller, royal). */
   meetHost() {
     const ev = this.eventHere();
     if (!ev?.host || ev.host.met) return null;
@@ -1435,7 +1460,7 @@ export class Game {
         p.mood = clamp(p.mood + 4, 0, 100);
       }
       got = this._grant(ev, { xp: 30 });
-      text = '"This one is for you, Mayor!" The whole village sings along.';
+      text = '"Here is a tale just for you, Mayor!" The whole village laughs along.';
     } else {
       const h = Math.round(this.islandHappiness());
       got = this._grant(ev, { xp: 50 });
@@ -1832,6 +1857,6 @@ export class Game {
   }
 }
 
-Object.assign(Game.prototype, SystemsMixin);
+Object.assign(Game.prototype, SystemsMixin, FrontierMixin, StoryMixin);
 
 export { WALKABLE_BUILDINGS, STEP };

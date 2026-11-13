@@ -12,7 +12,7 @@ export const RES = {
   brick: { name: 'Bricks', price: 13, icon: 'brick', crafted: true },
   glass: { name: 'Glass', price: 12, icon: 'glass', crafted: true },
   tool: { name: 'Tools', price: 32, icon: 'tool', crafted: true },
-  essence: { name: 'Magic Essence', price: 80, icon: 'essence', crafted: true },
+  essence: { name: 'Crystal Essence', price: 80, icon: 'essence', crafted: true },
 };
 export const RES_KEYS = Object.keys(RES);
 
@@ -81,7 +81,7 @@ export const BIOMES = {
   },
   fantasi: {
     name: 'Fantasy Isle', short: 'Fantasy', unlock: 18, cost: 12000,
-    desc: 'A magical island of purple grass, glowing crystals and giant mushrooms.',
+    desc: 'A strange island of purple grass, glowing crystals and giant mushrooms.',
     weather: { clear: 5, cloudy: 2, fog: 2, snow: 1 },
     sky: { moon: 1, milky: 1, aurora: 1 }, palette: 'Neon',
     look: { saturation: 1.2 },
@@ -166,7 +166,7 @@ export const BUILDINGS = {
   },
   kristal: {
     name: 'Crystal Tower', cat: 'prod', size: 1, cost: { coins: 500, glass: 20, brick: 20 }, unlock: 18, biomes: ['fantasi'],
-    desc: 'Harvests magic crystals from the night air.', jobs: 2, produce: { crystal: 0.45 },
+    desc: 'Harvests glowing crystals that grow in the cool night air.', jobs: 2, produce: { crystal: 0.45 },
   },
   kincir: {
     name: 'Windmill', cat: 'prod', size: 1, cost: { coins: 120, plank: 20 }, unlock: 4, notBiomes: ['kota'],
@@ -222,7 +222,7 @@ export const BUILDINGS = {
   },
   monumen: {
     name: 'Monument', cat: 'deco', size: 1, cost: { coins: 320, stone: 40, tool: 6 }, unlock: 10,
-    desc: 'A statue the whole island is proud of.', happy: { amount: 15, radius: 5 },
+    desc: 'A stone pillar crowned with a golden globe. The whole island is proud of it.', happy: { amount: 15, radius: 5 },
   },
   // ---- production chains and town services (v1.1)
   peternakan: {
@@ -262,8 +262,8 @@ export const BUILDINGS = {
     desc: 'Swings and a slide. Villagers love to play here in the evening.', happy: { amount: 9, radius: 3 }, leisure: true,
   },
   panggung: {
-    name: 'Bandstand', cat: 'deco', size: 2, cost: { coins: 480, plank: 30, brick: 15 }, unlock: 10,
-    desc: 'Live music every evening. Villagers gather to dance and clap along.', jobs: 1, produce: { coins: 2 }, happy: { amount: 14, radius: 5 }, leisure: true, stage: true,
+    name: 'Gazebo', cat: 'deco', size: 2, cost: { coins: 480, plank: 30, brick: 15 }, unlock: 10,
+    desc: 'A shady gazebo with string lights and tea. Villagers gather every evening to chat and play board games.', jobs: 1, produce: { coins: 2 }, happy: { amount: 14, radius: 5 }, leisure: true, stage: true,
   },
   menara_air: {
     name: 'Water Tower', cat: 'service', size: 1, cost: { coins: 360, brick: 20, plank: 20 }, unlock: 11,
@@ -294,6 +294,19 @@ export const BUILDINGS = {
     name: 'Museum', cat: 'service', size: 2, cost: { coins: 1400, brick: 40, glass: 25, tool: 6 }, unlock: 14,
     desc: 'Treasures from every island. Villagers visit in the evening; earns XP and coins.', jobs: 2, produce: { xp: 2, coins: 2 }, happy: { amount: 12, radius: 6 }, leisure: true,
   },
+  // ---- v1.3: hazard defences, one per hazard (see the counter field on the events)
+  seawall: {
+    name: 'Sea Wall', cat: 'service', size: 1, cost: { coins: 350, stone: 60, brick: 20 }, unlock: 4, biomes: ['pantai', 'desa'],
+    desc: 'A stone breakwater. High Tides do almost no harm to this island.', happy: { amount: 3, radius: 3 },
+  },
+  terracewall: {
+    name: 'Retaining Wall', cat: 'service', size: 1, cost: { coins: 320, stone: 70, plank: 10 }, unlock: 5, biomes: ['gunung', 'hutan'],
+    desc: 'Stepped stone walls keep the slopes in place. Rockslides only shake loose some extra stone.', happy: { amount: 3, radius: 3 },
+  },
+  windbreak: {
+    name: 'Windbreak', cat: 'service', size: 1, cost: { coins: 300, wood: 60, plank: 15 }, unlock: 4, biomes: ['gurun'],
+    desc: 'Date palms behind a reed fence. Sandstorms barely slow the town down.', happy: { amount: 4, radius: 3 },
+  },
   // ---- landmarks, one per island, only in their biome
   lumbung: {
     name: 'Grand Barn', cat: 'special', size: 2, cost: { coins: 400, plank: 30, brick: 15 }, unlock: 5, biomes: ['desa'], limit: 1,
@@ -312,16 +325,16 @@ export const BUILDINGS = {
     desc: 'A telescope above the clouds. Auroras look even prettier.', happy: { amount: 18, radius: 7 }, landmark: true,
   },
   obelisk: {
-    name: 'Sun Obelisk', cat: 'special', size: 1, cost: { coins: 1100, stone: 80, glass: 20 }, unlock: 12, biomes: ['gurun'], limit: 1,
-    desc: 'An ancient pillar that glitters at sunset.', happy: { amount: 18, radius: 7 }, landmark: true,
+    name: 'Sandstone Spire', cat: 'special', size: 1, cost: { coins: 1100, stone: 80, glass: 20 }, unlock: 12, biomes: ['gurun'], limit: 1,
+    desc: 'A tall sandstone spire that guides desert caravans and glitters at sunset.', happy: { amount: 18, radius: 7 }, landmark: true,
   },
   menarajam: {
     name: 'Clock Tower', cat: 'special', size: 1, cost: { coins: 1500, brick: 50, glass: 30, tool: 10 }, unlock: 15, biomes: ['kota'], limit: 1,
     desc: 'The city clock that chimes every morning.', happy: { amount: 20, radius: 8 }, landmark: true,
   },
   pohonkehidupan: {
-    name: 'Tree of Life', cat: 'special', size: 2, cost: { coins: 2500, crystal: 30, essence: 6 }, unlock: 19, biomes: ['fantasi'], limit: 1,
-    desc: 'A glowing magic tree. The whole island is happy.', happy: { amount: 25, radius: 10 }, leisure: true, landmark: true,
+    name: 'Great Glow Tree', cat: 'special', size: 2, cost: { coins: 2500, crystal: 30, essence: 6 }, unlock: 19, biomes: ['fantasi'], limit: 1,
+    desc: 'A giant tree with glowing leaves. The whole island is happy.', happy: { amount: 25, radius: 10 }, leisure: true, landmark: true,
   },
 };
 export const BUILD_CATS = [
@@ -383,7 +396,7 @@ export const RECIPES = [
   { id: 'brick', name: 'Bricks', in: { stone: 3 }, out: { brick: 1 }, time: 8, unlock: 3 },
   { id: 'glass', name: 'Glass', in: { sand: 3 }, out: { glass: 1 }, time: 9, unlock: 5 },
   { id: 'tool', name: 'Tools', in: { plank: 1, ore: 2 }, out: { tool: 1 }, time: 14, unlock: 6 },
-  { id: 'essence', name: 'Magic Essence', in: { crystal: 2, glass: 1 }, out: { essence: 1 }, time: 20, unlock: 18 },
+  { id: 'essence', name: 'Crystal Essence', in: { crystal: 2, glass: 1 }, out: { essence: 1 }, time: 20, unlock: 18 },
   { id: 'meal', name: 'Warm Meal', in: { food: 5, wood: 1 }, out: { food: 8 }, time: 10, unlock: 4 },
 ];
 
@@ -413,7 +426,14 @@ export const NODES = {
 
 // ---------------------------------------------------------------- people
 
+// global, easy-to-read first names (v1.3); LEGACY_NAMES maps names from older saves, index for index
 export const FIRST_NAMES = [
+  'Ava', 'Ben', 'Clara', 'Daniel', 'Elena', 'Felix', 'Grace', 'Henry', 'Iris', 'Jack', 'Kira', 'Leo', 'Maya', 'Noah',
+  'Olivia', 'Paul', 'Rosa', 'Sam', 'Tara', 'Uma', 'Vera', 'Will', 'Zoe', 'Adam', 'Bella', 'Chloe', 'David', 'Emma',
+  'Finn', 'Hana', 'Isaac', 'Jonas', 'Luca', 'Mila', 'Nina', 'Omar', 'Pia', 'Ruby', 'Sara', 'Theo', 'Victor', 'Yara',
+  'Amir', 'Lina', 'Hugo', 'Nora', 'Ezra', 'Alice', 'Max', 'Ivy',
+];
+export const LEGACY_NAMES = [
   'Ayu', 'Budi', 'Citra', 'Dewi', 'Eko', 'Fajar', 'Gita', 'Hadi', 'Indah', 'Joko', 'Kirana', 'Lestari', 'Made', 'Nanda',
   'Oki', 'Putri', 'Rama', 'Sari', 'Tono', 'Umi', 'Wati', 'Yoga', 'Zahra', 'Bagas', 'Dimas', 'Intan', 'Laras', 'Raka',
   'Sekar', 'Tari', 'Wulan', 'Arif', 'Bayu', 'Cahya', 'Dian', 'Galih', 'Hana', 'Irfan', 'Kemal', 'Mega', 'Nisa', 'Pandu',
@@ -442,7 +462,7 @@ export const TALK = {
   night: ['It\'s late, time to head home.', 'Look at all those stars!'],
   morning: ['Good morning!', 'A fresh morning for work.'],
   work: ['Work is going well today.', 'Almost done!'],
-  festival: ['Festival time! Let\'s dance!', 'This music is so fun!'],
+  festival: ["Festival time! Let's play some games!", 'This cake is so good!'],
 };
 
 // ---------------------------------------------------------------- quests
@@ -477,7 +497,7 @@ export const QUESTS = [
   { id: 'q27', title: 'A Good Education', desc: 'Build a School.', goals: [{ type: 'build', id: 'sekolah', n: 1 }], reward: { coins: 380, xp: 200, plank: 15 }, after: 'q26' },
   { id: 'q28', title: 'Year Round', desc: 'Live through 4 seasons.', goals: [{ type: 'seasons', n: 4 }], reward: { coins: 600, xp: 300, tool: 3 }, after: 'q10' },
   { id: 'q29', title: 'Clear Glass', desc: 'Build a Glassworks.', goals: [{ type: 'build', id: 'kaca', n: 1 }], reward: { coins: 420, xp: 220, sand: 40 }, after: 'q27' },
-  { id: 'q30', title: 'Music in the Air', desc: 'Build a Bandstand and reach 75% happiness.', goals: [{ type: 'build', id: 'panggung', n: 1 }, { type: 'happy', n: 75 }], reward: { coins: 700, xp: 360 }, after: 'q29' },
+  { id: 'q30', title: 'Evening Gathering', desc: 'Build a Gazebo and reach 75% happiness.', goals: [{ type: 'build', id: 'panggung', n: 1 }, { type: 'happy', n: 75 }], reward: { coins: 700, xp: 360 }, after: 'q29' },
   { id: 'q31', title: 'Healthy Town', desc: 'Build a Clinic and a Water Tower.', goals: [{ type: 'build', id: 'klinik', n: 1 }, { type: 'build', id: 'menara_air', n: 1 }], reward: { coins: 900, xp: 420, glass: 15 }, after: 'q30' },
   { id: 'q32', title: 'Booming Industry', desc: 'Have 3 production-chain buildings (Sawmill, Kiln or Glassworks).', goals: [{ type: 'chain', n: 3 }], reward: { coins: 1200, xp: 520, tool: 5 }, after: 'q31' },
   // ---- v1.2
@@ -519,7 +539,7 @@ export const ACHIEVEMENTS = [
   { id: 'ach_islands3', name: 'Explorer', desc: 'Unlock 3 islands.', stat: 'islands', n: 3, reward: { coins: 500 } },
   { id: 'ach_islands7', name: 'Island Emperor', desc: 'Unlock all 7 islands.', stat: 'islands', n: 7, reward: { coins: 5000 } },
   { id: 'ach_city', name: 'Neon Lights', desc: 'Unlock Neon City.', stat: 'kota', n: 1, reward: { coins: 300 }, unlocks: 'Neon Paint' },
-  { id: 'ach_magic', name: 'Wizard', desc: 'Craft 5 Magic Essence.', stat: 'essence', n: 5, reward: { coins: 800 }, unlocks: 'Crystal Paint' },
+  { id: 'ach_magic', name: 'Crystal Crafter', desc: 'Craft 5 Crystal Essence.', stat: 'essence', n: 5, reward: { coins: 800 }, unlocks: 'Crystal Paint' },
   { id: 'ach_landmark', name: 'Iconic', desc: 'Build 3 landmarks.', stat: 'landmarks', n: 3, reward: { coins: 1500 } },
   { id: 'ach_days', name: 'Loyal', desc: 'Spend 30 days in this world.', stat: 'days', n: 30, reward: { coins: 700 } },
   { id: 'ach_streak', name: 'Regular Visitor', desc: 'Claim the Daily Reward 7 days in a row.', stat: 'streak', n: 7, reward: { coins: 700 } },
@@ -577,8 +597,8 @@ export const EVENTS = [
   {
     id: 'festival', name: 'Village Festival', icon: 'festival', kind: 'good', hours: 3, weight: 2, minPop: 5, night: false,
     desc: 'Villagers are partying in the square! Happiness is up.',
-    flavor: 'Music, dancing and far too much cake. Everyone heads to the town square!',
-    effect: ['Happiness +10', 'Villagers dance at the plaza'], fx: { mood: 10, gather: [9, 21.5], pose: 'dance' },
+    flavor: 'Games, food stalls and far too much cake. Everyone heads to the town square!',
+    effect: ['Happiness +10', 'Villagers cheer at the plaza'], fx: { mood: 10, gather: [9, 21.5], pose: 'clap' },
   },
   {
     id: 'storm', name: 'Storm Incoming', icon: 'storm', kind: 'bad', hours: 2, weight: 2, notBiomes: ['gurun'],
@@ -633,17 +653,17 @@ export const EVENTS = [
   },
   {
     id: 'lantern', name: 'Lantern Festival', icon: 'lantern', kind: 'good', hours: 4, weight: 2, minPop: 4, start: [18, 21],
-    desc: 'Glowing lanterns float into the night sky. Happiness up!',
-    flavor: 'Every villager writes a wish on a paper lantern and lets it drift up to the stars.',
+    desc: 'Paper lanterns light up every street. Happiness up!',
+    flavor: 'Villagers hang paper lanterns along the streets and stay out late chatting under the warm light.',
     effect: ['Happiness +12', 'Villagers gather at the plaza until late'],
     fx: { mood: 12, fun: 2, gather: [18, 23.9], pose: 'wave' },
   },
   {
-    id: 'bard', name: 'Wandering Bard', icon: 'music', kind: 'visit', hours: 4, weight: 2, minPop: 3, start: [9, 16],
-    desc: 'A bard plays at the plaza. Villagers dance and have fun!',
-    flavor: 'A traveling musician tunes a lute by the town hall. Soon the whole village is dancing.',
-    effect: ['Villagers dance at the plaza', 'Fun x2.5, happiness +8'], tip: 'Walk the Mayor up to the bard to request a song.',
-    fx: { mood: 8, fun: 2.5, gather: [9, 20], gatherFor: 2.5, pose: 'dance' }, host: 'bard',
+    id: 'bard', name: 'Wandering Storyteller', icon: 'chat', kind: 'visit', hours: 4, weight: 2, minPop: 3, start: [9, 16],
+    desc: 'A storyteller sits at the plaza. Villagers gather to listen and laugh!',
+    flavor: 'A traveler with a big book of tales sits down by the town hall. Soon the whole village is listening.',
+    effect: ['Villagers gather at the plaza', 'Fun x2.5, happiness +8'], tip: 'Walk the Mayor up to the storyteller to hear a tale.',
+    fx: { mood: 8, fun: 2.5, gather: [9, 20], gatherFor: 2.5, pose: 'clap' }, host: 'bard',
   },
   {
     id: 'birthday', name: 'Birthday Party', icon: 'cake', kind: 'good', hours: 8, weight: 2, minPop: 3, start: [8, 15],
@@ -686,16 +706,16 @@ export const EVENTS = [
   // ---- finding things
   {
     id: 'starfall', name: 'Starfall', icon: 'sparkle', kind: 'good', hours: 3, weight: 2, minLevel: 4, start: [20.5, 2], notWeather: ['rain', 'storm', 'snow'],
-    desc: 'Shooting stars are falling! Tap fallen stars for Magic Essence.',
+    desc: 'Shooting stars are falling! Tap fallen stars for Crystal Essence.',
     flavor: 'The sky is raining light tonight. Some stars have landed on the island, still warm and glowing.',
-    effect: ['Fallen stars land across the island', 'Each one gives Magic Essence and Crystal'],
+    effect: ['Fallen stars land across the island', 'Each one gives Crystal Essence and Crystal'],
     tip: 'Tap a glowing star and the Mayor will pick it up.',
     fx: { weather: 'clear', mood: 4 }, props: { kind: 'star', n: 2, perHour: 1, max: 5 },
   },
   {
     id: 'rainbow', name: 'Rainbow', icon: 'rainbow', kind: 'good', hours: 3, weight: 6, start: [8, 16], weatherIn: ['rain', 'storm'],
     desc: 'The rain stops and a rainbow appears! Coins +50%.',
-    flavor: 'They say there is a pot of gold where the rainbow ends. Maybe it is true?',
+    flavor: 'Sunlight breaks through the rain and a bright rainbow arches over the island.',
     effect: ['Coin income +50%', 'A pot of gold is hidden somewhere'], tip: 'Find the pot of gold and tap it.',
     fx: { weather: 'clear', mult: { coin: 1.5 }, mood: 6 }, props: { kind: 'gold', n: 1 },
   },
@@ -728,10 +748,10 @@ export const EVENTS = [
     props: { kind: 'kid', n: 3 }, endWhenDone: true,
   },
   {
-    id: 'spooky', name: 'Spooky Night', icon: 'ghost', kind: 'good', hours: 5, weight: 2, minLevel: 2, start: [19.5, 23],
-    desc: 'Ghost lights drift through a purple fog. Catch wisps for crystals!',
-    flavor: 'Owls hoot, the fog glows purple and little wisps float between the trees...',
-    effect: ['Catch ghost wisps for Crystal and coins', 'Spooky stories: leisure fun +50%'],
+    id: 'spooky', name: 'Marsh Lights', icon: 'sparkle', kind: 'good', hours: 5, weight: 2, minLevel: 2, start: [19.5, 23],
+    desc: 'Glowing marsh lights drift through a purple mist. Catch them for crystals!',
+    flavor: 'Owls hoot, the mist glows purple and little balls of light float between the trees...',
+    effect: ['Catch the glowing lights for Crystal and coins', 'Night walks: leisure fun +50%'],
     tip: 'Tap a wisp and the Mayor will catch it.',
     fx: { weather: 'fog', fun: 1.5 }, props: { kind: 'wisp', n: 3, perHour: 1, max: 6 },
   },
@@ -772,13 +792,15 @@ export const EVENTS = [
     flavor: 'A wall of sand rolls over the dunes. Everyone hurries indoors.',
     effect: ['All production -25%, sand x2.5', 'Villagers shelter indoors'],
     fx: { weather: 'fog', mult: { all: 0.75, sand: 2.5 }, indoors: true, mood: -4 },
+    counter: 'windbreak', guardText: 'Your Windbreak shelters the town: production only -5%.',
+    guardFx: { weather: 'fog', mult: { all: 0.95, sand: 2.5 }, mood: -1 },
   },
 
   // ---- nature
   {
     id: 'harvestmoon', name: 'Harvest Moon', icon: 'moon', kind: 'good', hours: 14, weight: 2, minLevel: 2, needs: 'ladang', notBiomes: ['kota'], start: [19, 23], notWeather: ['rain', 'storm'],
     desc: 'A huge orange moon rises. Food x2 and berry bushes regrow.',
-    flavor: 'Old farmers say crops grown under the Harvest Moon grow twice as fast.',
+    flavor: 'A bright full moon lights the fields, so the farmers can keep working long after sunset.',
     effect: ['Food production x2 until tomorrow', 'Every berry bush regrows at once'],
     fx: { weather: 'clear', mult: { food: 2 } },
   },
@@ -796,7 +818,7 @@ export const EVENTS = [
   },
   {
     id: 'aurora', name: 'Aurora Night', icon: 'crystal', kind: 'good', hours: 6, weight: 3, biomes: ['gunung', 'fantasi', 'hutan'], start: [20, 23.5], notWeather: ['rain', 'storm'],
-    desc: 'Green lights dance in the sky. Crystal production x2!',
+    desc: 'Green lights ripple across the sky. Crystal production x2!',
     flavor: 'Ribbons of green and violet light ripple across the stars, and the crystals hum along.',
     effect: ['Crystal production x2', 'Happiness +8'], fx: { weather: 'clear', aurora: true, mood: 8, mult: { crystal: 2 } },
   },
@@ -818,7 +840,7 @@ export const EVENTS = [
     id: 'harvestfest', name: 'Harvest Festival', icon: 'food', kind: 'good', hours: 6, weight: 3, minPop: 4, seasons: ['autumn'], needs: 'ladang', start: [9, 15],
     desc: 'Pumpkins, pies and a big bonfire. Food x1.6 and a party at the plaza.',
     flavor: 'The barns are full and the whole village celebrates the year\'s harvest together.',
-    effect: ['Food production x1.6', 'Villagers celebrate at the plaza in the evening'], fx: { mood: 8, mult: { food: 1.6 }, gather: [17, 21], pose: 'dance' },
+    effect: ['Food production x1.6', 'Villagers celebrate at the plaza in the evening'], fx: { mood: 8, mult: { food: 1.6 }, gather: [17, 21], pose: 'clap' },
   },
   {
     id: 'snowfest', name: 'Snow Festival', icon: 'snowflake', kind: 'good', hours: 6, weight: 3, minPop: 4, seasons: ['winter'], notBiomes: ['pantai', 'gurun'], start: [9, 16],
@@ -855,7 +877,25 @@ export const EVENTS = [
     id: 'tourists', name: 'Tourist Season', icon: 'compass', kind: 'visit', hours: 6, weight: 2, minLevel: 5, minPop: 8, seasons: ['summer', 'spring'], start: [8, 14],
     desc: 'Tourists flock to the island! Shops, diners and markets earn +70%.',
     flavor: 'Cameras click, sun hats bob along the streets and the cash registers ring.',
-    effect: ['Shops, diners, markets and bandstands earn +70%', 'Sell prices +20%'], fx: { type: { toko: 1.7, kedai: 1.7, pasar: 1.7, panggung: 1.7 }, sell: 1.2, mood: 3 },
+    effect: ['Shops, diners, markets and gazebos earn +70%', 'Sell prices +20%'], fx: { type: { toko: 1.7, kedai: 1.7, pasar: 1.7, panggung: 1.7 }, sell: 1.2, mood: 3 },
+  },
+
+  // ---- v1.3: biome hazards, each countered by a building (counter / guardFx / guardText)
+  {
+    id: 'flood', name: 'High Tide', icon: 'wave', kind: 'bad', hours: 4, weight: 2, minLevel: 4, biomes: ['pantai', 'desa'], notWeather: ['snow'],
+    desc: 'A spring tide floods the low fields. Food -40%, everything else -15%.',
+    flavor: 'The sea creeps over the dunes and the ditches overflow. Boots on, everyone!',
+    effect: ['Food production -40%', 'All other production -15%'], fx: { weather: 'rain', mult: { food: 0.6, all: 0.85 }, mood: -4 },
+    counter: 'seawall', guardText: 'Your Sea Wall holds back the water: only food -5%.',
+    guardFx: { weather: 'rain', mult: { food: 0.95 } },
+  },
+  {
+    id: 'landslide', name: 'Rockslide', icon: 'stone', kind: 'bad', hours: 3, weight: 2, minLevel: 5, biomes: ['gunung', 'hutan'], notWeather: ['snow'],
+    desc: 'Loose rocks tumble down the slopes. Building is slower, wood and food suffer.',
+    flavor: 'After days of rain a hillside gives way. Rocks block the paths and the lumber trails.',
+    effect: ['Construction 50% slower', 'Wood -40%, food -20%'], fx: { build: 0.5, mult: { wood: 0.6, food: 0.8 }, mood: -4, quake: true },
+    counter: 'terracewall', guardText: 'Your Retaining Wall holds the slope: the loose rock even gives +30% stone.',
+    guardFx: { mult: { stone: 1.3 } },
   },
 ];
 export const EVENT_BY_ID = Object.fromEntries(EVENTS.map((e) => [e.id, e]));

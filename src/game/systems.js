@@ -55,8 +55,8 @@ const techReq = (t) => TECHS.find((x) => x.br === t.br && x.tier === t.tier - 1)
 // ---------------------------------------------------------------- orders
 
 export const ORDER_CLIENTS = [
-  { name: 'Captain Rahmat', icon: 'compass', line: 'My ship sails at dawn. Can you fill the hold?' },
-  { name: "Sari's Bakery", icon: 'food', line: 'The ovens are hungry, Mayor!' },
+  { name: 'Captain Hale', icon: 'compass', line: 'My ship sails at dawn. Can you fill the hold?' },
+  { name: "Rosa's Bakery", icon: 'food', line: 'The ovens are hungry, Mayor!' },
   { name: 'The Royal Court', icon: 'crown', line: 'His Majesty requests the finest goods.' },
   { name: 'Mountain Guild', icon: 'ore', line: 'We are building a new hall up north.' },
   { name: 'Harbor Traders', icon: 'fish', line: 'Good prices, fair deals, fast ships.' },
@@ -64,7 +64,7 @@ export const ORDER_CLIENTS = [
   { name: 'Wandering Scholar', icon: 'xp', line: 'For my research, if you would be so kind.' },
   { name: 'City Builders', icon: 'build', line: 'Skyscrapers do not build themselves.' },
   { name: 'Lighthouse Keeper', icon: 'lantern', line: 'A long winter is coming. Help me prepare.' },
-  { name: 'Grandma Wati', icon: 'heart', line: 'Just a little something for my grandchildren.' },
+  { name: 'Grandma Ellie', icon: 'heart', line: 'Just a little something for my grandchildren.' },
 ];
 const ORDER_CD = 45 * 1000; // after a delivery, ms
 const ORDER_SKIP_CD = 90 * 1000;
@@ -130,6 +130,7 @@ export const SystemsMixin = {
         else out[k] = (out[k] || 0) + v;
       }
     }
+    this.projectFx?.(out);
     this._tfx = out;
     return out;
   },
@@ -175,6 +176,16 @@ export const SystemsMixin = {
   },
   rushCost(now = Date.now()) {
     return Math.max(1, Math.ceil(this.researchLeft(now) / 60));
+  },
+  /** Rewarded ad: halves the time left on the running research (once per project). */
+  adSpeedResearch() {
+    const c = this.s.research.cur;
+    if (!c || c.ad) return { ok: false };
+    const now = Date.now();
+    c.ad = 1;
+    c.end = now + Math.max(0, (c.end - now) / 2);
+    this.updateResearch();
+    return { ok: true };
   },
   rushResearch() {
     const c = this.s.research.cur;
