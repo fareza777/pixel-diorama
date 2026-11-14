@@ -1,4 +1,4 @@
-// Pixel Diorama: World Builder - app bootstrap: engine, world, input, UI, game loop, saving,
+// Pixel Diorama: City Builder - app bootstrap: engine, world, input, UI, game loop, saving,
 // lifecycle and adaptive quality.
 import './styles.css';
 import './styles-story.css';
@@ -19,6 +19,7 @@ import { N, tileCenter } from './game/island.js';
 import { icon } from './ui/icons.js';
 import { Cinematic } from './ui/cinematic.js';
 import { initAds, showBanner, hideBanner, maybeInterstitial, showRewarded, showAdPrivacy } from './ads.js';
+import { initBilling, refreshPurchases, buyRemoveAds, restorePurchases, onBillingChange } from './billing.js';
 
 const escH = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // big icon on top of an announcement (sits above the spinning .burst background)
@@ -118,7 +119,9 @@ class App {
       } catch {}
       if (fresh) this.begin();
     }, wait + 450);
-    initAds();
+    // billing first, so a player who bought Remove Ads never sees a banner flash in
+    initBilling().finally(() => initAds());
+    onBillingChange(() => this.ui.onBillingChange?.());
   }
 
   // ---------------------------------------------------------------- display
@@ -515,6 +518,25 @@ class App {
     this.save();
   }
 
+  /** Settings > Remove Ads: Google Play purchase flow. */
+  async buyRemoveAds() {
+    const r = await buyRemoveAds();
+    if (r === 'owned') {
+      this.audio.play('quest');
+      this.ui.toast('Thank you! Ads are removed for good.', { icon: 'check', ms: 3000 });
+    } else if (r === 'pending') {
+      this.ui.toast('Your payment is pending. Ads will be removed as soon as Google Play confirms it.', { icon: 'info', ms: 4200 });
+    } else if (r === 'error') {
+      this.ui.toast('The purchase could not be completed. Please try again later.', { kind: 'warn' });
+    }
+  }
+
+  /** Settings > Restore purchases. */
+  async restorePurchases() {
+    const ok = await restorePurchases();
+    this.ui.toast(ok ? 'Purchase restored: ads are removed.' : 'No Remove Ads purchase was found for this Google account.', { icon: ok ? 'check' : 'info', ms: 3200 });
+  }
+
   adPrivacy() {
     showAdPrivacy().then((ok) => !ok && this.ui.toast('Ad privacy options are not needed in your region.', { icon: 'info' }));
   }
@@ -632,6 +654,7 @@ class App {
     this.last = performance.now();
     this.lastFrame = this.last;
     this.audio.resume();
+    refreshPurchases();
     const away = (Date.now() - (this.hiddenAt || Date.now())) / 1000;
     const off = this.game.applyOffline(away);
     if (off && Object.keys(off.got).length && this.started) {

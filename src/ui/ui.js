@@ -12,6 +12,7 @@ import {
 import { TIERS } from '../game/perf.js';
 import { N, idx, tileCenter } from '../game/island.js';
 import { buzz } from '../platform.js';
+import { adsRemovedOwned, removeAdsPrice } from '../billing.js';
 import NOXE_LICENSE from '../engine/LICENSE-noxe-pixel-engine.txt?raw';
 import { TownMixin } from './town.js';
 import { FrontierUIMixin } from './frontier-ui.js';
@@ -227,6 +228,8 @@ export class UI {
       case 'island-buy': this.buyIsland(arg); break;
       case 'set': this.changeSetting(arg, el.dataset.v); break;
       case 'credits': this.openCredits(); break;
+      case 'buy-noads': this.app.buyRemoveAds(); break;
+      case 'restore-iap': this.app.restorePurchases(); break;
       case 'wipe': this.confirmWipe(); break;
       case 'hint-ok': this.dismissHint(); break;
       case 'tab': this._tab(el); break;
@@ -1454,9 +1457,23 @@ export class UI {
       <div class="setting"><span>Screen shake</span><div class="segs">${opt('shake', true, 'On')}${opt('shake', false, 'Off')}</div></div>
       <div class="setting"><span>Miniature focus</span><div class="segs">${opt('tilt', true, 'On')}${opt('tilt', false, 'Off')}</div></div>
       <div class="setting"><span>Show FPS</span><div class="segs">${opt('fps', true, 'Yes')}${opt('fps', false, 'No')}</div></div>
+      ${this._removeAdsHTML()}
       <div class="btns"><button class="btn" data-act="journal">${icon('quest')} Journal</button><button class="btn" data-act="credits">${icon('info')} Credits & Licenses</button><button class="btn" data-act="menu-privacy">${icon('eye')} Ad privacy</button><button class="btn danger" data-act="wipe">${icon('trash')} Delete Data</button></div>
-      <p class="muted center">Pixel Diorama: World Builder v${this.app.version} · Plays offline · Ads by Google AdMob · No in-app purchases.</p>`;
+      <p class="muted center">Pixel Diorama: City Builder v${this.app.version} · Plays offline · Ads by Google AdMob · Optional one-time Remove Ads purchase via Google Play.</p>`;
     this.openSheet(`${icon('gear')} Settings`, html, { kind: 'settings' });
+  }
+
+  _removeAdsHTML() {
+    if (adsRemovedOwned()) {
+      return `<div class="setting"><span>${icon('check')} Ads removed. Thank you for supporting F7 Developer!</span><div class="segs"><button class="btn sm" data-act="restore-iap">Restore purchases</button></div></div>`;
+    }
+    const price = removeAdsPrice();
+    return `<div class="setting"><span>${icon('star')} Remove banner & interstitial ads (one-time). Optional reward ads stay available.</span><div class="segs"><button class="btn sm buy" data-act="buy-noads">Remove Ads${price ? ` – ${esc(price)}` : ''}</button><button class="btn sm" data-act="restore-iap">Restore purchases</button></div></div>`;
+  }
+
+  /** Billing state changed (purchase, restore, refund, price loaded): refresh an open Settings sheet. */
+  onBillingChange() {
+    if (this.panel?.kind === 'settings' && !$('#sheet').classList.contains('hidden')) this.openSettings();
   }
 
   changeSetting(key, raw) {
@@ -1470,7 +1487,7 @@ export class UI {
   openCredits() {
     this.openSheet(`${icon('info')} Credits & Licenses`, `
       <div class="credits">
-        <h3>Pixel Diorama: World Builder</h3>
+        <h3>Pixel Diorama: City Builder</h3>
         <p>© 2026 F7 Developer. All rights reserved.</p>
         <h3>Graphics & sound engine</h3>
         <p>The pixel-art renderer, day-night cycle, weather, materials and procedural audio are built on <b>noxe-pixel-engine</b> by Daniel Jankulovski, released under the MIT license.<br><small>github.com/danieljan-design/noxe-pixel-engine</small></p>

@@ -14,7 +14,7 @@ export const MenuMixin = {
   titleHTML() {
     return `<div id="title">
         <div class="title-box">
-          <div class="logo"><span class="l1">PIXEL</span><span class="l2">DIORAMA</span><span class="l3">World Builder</span></div>
+          <div class="logo"><span class="l1">PIXEL</span><span class="l2">DIORAMA</span><span class="l3">City Builder</span></div>
           <div class="tagline">${esc(STORY_TITLE)}</div>
           <div class="menu">
             <button class="btn primary big" data-act="start" id="btn-start">Loading...</button>
@@ -35,7 +35,7 @@ export const MenuMixin = {
   openAbout() {
     const v = this.app.version;
     this.modal(`<div class="about">
-      <h2>Pixel Diorama</h2><p class="muted">World Builder · version ${esc(v)}</p>
+      <h2>Pixel Diorama</h2><p class="muted">City Builder · version ${esc(v)}</p>
       <p><b>${esc(STORY_TITLE)}</b><br>After the Great Storm the Seven Isles fell quiet. With a box of tools and a letter from Ellie, the old harbour master, you set out to bring them back to life, one island at a time.</p>
       <p class="muted">Made by <b>F7 Developer</b>. 3D pixel-art renderer adapted from noxe-pixel-engine (MIT) on three.js (MIT). Voices generated with neural text-to-speech.</p>
       <p class="muted">The game plays offline. It shows ads from Google AdMob, which may use device identifiers to show ads; you can change consent at any time below.</p>
@@ -44,9 +44,9 @@ export const MenuMixin = {
   },
 
   async shareGame() {
-    const text = `I am rebuilding the Seven Isles in Pixel Diorama: World Builder. Come and build your own little world!`;
+    const text = `I am rebuilding the Seven Isles in Pixel Diorama: City Builder. Come and build your own little world!`;
     try {
-      if (platform.native) await Share.share({ title: 'Pixel Diorama: World Builder', text, url: STORE_URL, dialogTitle: 'Share Pixel Diorama' });
+      if (platform.native) await Share.share({ title: 'Pixel Diorama: City Builder', text, url: STORE_URL, dialogTitle: 'Share Pixel Diorama' });
       else if (navigator.share) await navigator.share({ title: 'Pixel Diorama', text, url: STORE_URL });
       else {
         await navigator.clipboard?.writeText(`${text} ${STORE_URL}`);
