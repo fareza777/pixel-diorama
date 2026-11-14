@@ -6,5 +6,5 @@
     <string name="custom_url_scheme">com.f7developer.pixeldiorama</string>
     <!-- Real AdMob application id (release). Debug builds override it with the test id in src/debug/res/values/admob.xml.
          Keep it in sync with the ad unit ids in src/ads-config.js. -->
-    <string name="admob_app_id" translatable="false">ca-app-pub-6279186647593327~REPLACE_APP_ID</string>
+    <string name="admob_app_id" translatable="false">ca-app-pub-6279186647593327~5507490779</string>
 </resources>

@@ -10,9 +10,9 @@ export const ADS_RELEASE = import.meta.env.MODE === 'release';
 
 /** Real AdMob ad units for Pixel Diorama (publisher pub-6279186647593327). */
 const RELEASE_UNITS = {
-  banner: 'ca-app-pub-6279186647593327/REPLACE_BANNER',
-  interstitial: 'ca-app-pub-6279186647593327/REPLACE_INTERSTITIAL',
-  rewarded: 'ca-app-pub-6279186647593327/REPLACE_REWARDED',
+  banner: 'ca-app-pub-6279186647593327/6575149536',
+  interstitial: 'ca-app-pub-6279186647593327/5262067867',
+  rewarded: 'ca-app-pub-6279186647593327/4302220311',
 };
 
 /** Google's public test units. */
