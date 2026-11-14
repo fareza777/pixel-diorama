@@ -1,16 +1,13 @@
 // AdMob (v1.3): a bottom banner during play, an occasional interstitial at natural breaks (island
-// travel) and opt-in rewarded ads. Every id below is Google's public TEST id: swap them (and the app id
-// in android/app/src/main/res/values/strings.xml) for your own units before publishing.
+// travel) and opt-in rewarded ads. Ad ids live in ./ads-config.js (test ids except in release builds).
+// Buying "Remove Ads" (./billing.js) turns the banner and interstitials off for good; rewarded ads stay
+// available because the player chooses to watch them for a bonus.
 // The navigation bar always stays visible (MainActivity); the plugin places the banner right above it and
 // the game UI moves up by the banner height (--ad-h), so the banner never covers any button. In the browser (development) ads are simulated.
 import { Capacitor } from '@capacitor/core';
+import { AD_UNITS, TESTING } from './ads-config.js';
 
-export const AD_UNITS = {
-  banner: 'ca-app-pub-3940256099942544/9214589741', // test: adaptive banner
-  interstitial: 'ca-app-pub-3940256099942544/1033173712', // test: interstitial
-  rewarded: 'ca-app-pub-3940256099942544/5224354917', // test: rewarded
-};
-const TESTING = true; // keep true while the test ids above are in use
+export { AD_UNITS };
 const INTERSTITIAL_GAP_MS = 3 * 60 * 1000; // at most one interstitial every 3 minutes
 const INTERSTITIAL_GRACE_MS = 4 * 60 * 1000; // and none in the first minutes of a session
 
@@ -18,6 +15,7 @@ const native = Capacitor.isNativePlatform();
 let AdMob = null, E = null;
 let ready = false, bannerOn = false, bannerWanted = false;
 let lastInterstitial = 0;
+let adsRemoved = false;
 const sessionStart = Date.now();
 const root = document.documentElement;
 
@@ -42,16 +40,32 @@ export async function initAds() {
       root.style.setProperty('--ad-h', `${Math.max(0, Math.round(size?.height || 0))}px`);
     });
     ready = true;
-    prepareInterstitial();
+    if (!adsRemoved) prepareInterstitial();
     if (bannerWanted) showBanner();
   } catch (e) {
     console.warn('ads unavailable', e);
   }
 }
 
+/** Called by billing when the Remove Ads purchase is owned (or revoked after a refund). */
+export function setAdsRemoved(removed) {
+  adsRemoved = !!removed;
+  if (adsRemoved) {
+    const wanted = bannerWanted;
+    hideBanner();
+    bannerWanted = wanted; // remember the screen state in case ownership is revoked later
+  } else if (bannerWanted) {
+    showBanner();
+  }
+}
+
+export function areAdsRemoved() {
+  return adsRemoved;
+}
+
 export async function showBanner() {
   bannerWanted = true;
-  if (!ready || bannerOn) return;
+  if (adsRemoved || !ready || bannerOn) return;
   if (!native) return;
   try {
     await AdMob.showBanner({ adId: AD_UNITS.banner, adSize: E.BannerAdSize.ADAPTIVE_BANNER, position: E.BannerAdPosition.BOTTOM_CENTER, margin: 0, isTesting: TESTING });
@@ -74,7 +88,7 @@ export async function hideBanner() {
 }
 
 async function prepareInterstitial() {
-  if (!native || !ready) return;
+  if (!native || !ready || adsRemoved) return;
   try {
     await AdMob.prepareInterstitial({ adId: AD_UNITS.interstitial, isTesting: TESTING });
   } catch (e) {
@@ -84,6 +98,7 @@ async function prepareInterstitial() {
 
 /** Show an interstitial at a natural break, if enough time has passed. Resolves when it is closed. */
 export async function maybeInterstitial() {
+  if (adsRemoved) return false;
   const now = Date.now();
   if (now - sessionStart < INTERSTITIAL_GRACE_MS || now - lastInterstitial < INTERSTITIAL_GAP_MS) return false;
   lastInterstitial = now;

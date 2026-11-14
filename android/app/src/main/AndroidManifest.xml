@@ -34,7 +34,7 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- AdMob (v1.3). The value is Google's public TEST app id; put the real one in strings.xml for release. -->
+        <!-- AdMob app id: real id in main/res/values/strings.xml, test id for debug builds in src/debug. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="@string/admob_app_id" />
